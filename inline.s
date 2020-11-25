@@ -2,7 +2,7 @@
 
 .ifndef CONFIG_NO_INPUTBUFFER_ZP
 L2420:
-  .ifdef OSI
+  .if .def(OSI) || .def(BADGER6502)
         jsr     OUTDO
   .endif
         dex
@@ -16,7 +16,7 @@ LB35F:
         bpl     INLIN2
   .endif
 L2423:
-  .ifdef OSI
+  .if .def(OSI) || .def(BADGER6502)
         jsr     OUTDO
   .endif
         jsr     CRDO
@@ -42,7 +42,7 @@ L0C32:
         ldy     #>INPUTBUFFER-1
         rts
   .endif
-
+   
   .ifndef APPLE
         ldx     #$00
 INLIN2:
@@ -99,7 +99,7 @@ L2443:
     .endif
         sta     INPUTBUFFER,x
         inx
-    .if .def(OSI) || .def(AIM65)
+    .if .def(OSI) || .def(AIM65) || .def(BADGER6502)
         .byte   $2C
     .else
         bne     INLIN2
@@ -126,7 +126,7 @@ GETLN:
     .else
         jsr     MONRDKEY
     .endif
-    .ifdef OSI
+    .if .def(OSI) || .def(BADGER6502)
         nop
         nop
         nop

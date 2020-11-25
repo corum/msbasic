@@ -7,7 +7,6 @@ CONFIG_CBM1_PATCHES := 1 ; ** don't turn off! **
 CONFIG_DATAFLG := 1
 CONFIG_FILE := 1; support PRINT#, INPUT#, GET#, CMD
 CONFIG_NO_CR := 1; terminal doesn't need explicit CRs on line ends
-CONFIG_NO_LINE_EDITING := 1; support for "@", "_", BEL etc.
 CONFIG_PRINTNULLS := 1; whether PRINTNULLS does anything
 CONFIG_SCRTCH_ORDER := 2
 

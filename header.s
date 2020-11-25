@@ -11,3 +11,8 @@
 .ifdef SYM1
         jmp     PR_WRITTEN_BY
 .endif
+.ifdef BADGER6502
+        jmp     COLD_START
+        jmp     RESTART
+        jmp     _cls
+.endif

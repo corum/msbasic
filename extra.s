@@ -1,5 +1,9 @@
 .segment "EXTRA"
 
+.ifdef BADGER6502
+.include "badger6502_extra.s"
+.endif
+
 .ifdef KIM
 .include "kim_extra.s"
 .endif

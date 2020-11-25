@@ -1,7 +1,7 @@
 .feature force_range
 .debuginfo +
 
-.setcpu "6502"
+.setcpu "65C02"
 .macpack longbranch
 
 .include "defines.s"

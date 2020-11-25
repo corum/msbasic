@@ -8,7 +8,7 @@
 .ifdef KBD
 .include "kbd_iscntc.s"
 .endif
-.ifdef OSI
+.if .def(OSI)
 .include "osi_iscntc.s"
 .endif
 .ifdef APPLE
@@ -25,5 +25,8 @@
 .endif
 .ifdef SYM1
 .include "sym1_iscntc.s"
+.endif
+.ifdef BADGER6502
+.include "badger6502_iscntc.s"
 .endif
 ;!!! runs into "STOP"

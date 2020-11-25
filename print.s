@@ -381,7 +381,7 @@ L2A4E:
 .ifdef CONFIG_MONCOUT_DESTROYS_Y
         ldy     DIMFLG
 .endif
-.ifdef OSI
+.if .def(OSI) || .def(BADGER6502)
         nop
         nop
         nop
