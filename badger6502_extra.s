@@ -53,6 +53,7 @@ KBEXTEND  = $A4
 KBKEYUP   = $A5
 KBDBG     = $A6
 KBDBG2    = $A7
+KEYTEMP   = $A8
 
 KBBUF    = $100
 KEYSTATE = $200
@@ -105,8 +106,10 @@ init:
 
 ; initialize the ACIA
     sta A_RES      ; soft reset (value not important)
-    lda #$0B       ; set specific modes and functions
-                   ; no parity, no echo, no Tx interrupt, no Rx interrupt, enable Tx/Rx
+
+                   ; set specific modes and functions
+                   ; no parity, no echo, no Tx interrupt, Rx interrupt, enable Tx/Rx
+    lda #%00001001
     sta A_CMD      ; store to the command register
 
     ;lda #$00      ; 1 stop bits, 8 bit word length, external clock, 16x baud rate
@@ -369,6 +372,36 @@ tx_backspace:
     pla
     rts
 
+; KEYBOARD
+read_char:
+    phx
+@readloop:
+    lda KBCURR
+    cmp #$00
+    beq @readloop  ; loop waiting for keyboard input
+ 
+    sei
+    lda KBBUF      ; this is our keyboard input
+    sta KEYTEMP
+
+    ldx #$00
+@moveloop:
+    inx
+    lda KBBUF,x
+    dex
+    sta KBBUF,x
+    inx
+    cpx KBCURR
+    bne @moveloop
+
+    dec KBCURR
+
+    lda KEYTEMP
+    cli
+
+    plx
+    rts
+
 ; DISPLAY 
 display_char:
     jsr output_char
@@ -590,13 +623,34 @@ scroll:
 nmi:
     rti
 
-;INTERRUPT
 irq:
     pha
     phx
     phy
 
+    ; check the IFR to see if it's the VIA - aka the keyboard
+    lda IFR
+    bne @ps2_keyboard_decode
+    
+    ; check the ACIA status register to see if we've received data
+    ; reading the status register clears the irq bit
+    lda A_STS
+    and #%00001000   ; check receive bit
+    bne @irq_receive
 
+    jmp @exit
+
+
+@irq_receive:
+    ; we now have the byte, we need to add it to the keyboard buffer
+    lda A_RXD
+    ldx KBCURR
+    sta KBBUF, x
+    inc KBCURR
+    jmp @exit
+
+
+@ps2_keyboard_decode:
     lda PORTA
     ror
     ror       ; rotate into high order bit
@@ -658,6 +712,7 @@ irq:
     lda #PS2_START
     sta KBSTATE
 
+@process_key:
     lda KBTEMP
     cmp #$E0           ; set the extended bit if it's an extended character
     bne @notextended
@@ -687,7 +742,7 @@ irq:
 @setkeystate:          ; set the key state - this is key down path
     ldx KBTEMP
     lda #$01
-    and KBEXTEND
+    ora KBEXTEND
     sta KEYSTATE, x
 
     ; check for non printable 
@@ -707,13 +762,17 @@ irq:
     ; check for shift state
     ldx #$12
     lda KEYSTATE,x
-    cmp #$00
     bne @shifted
     
     ldx #$59
     lda KEYSTATE,x
-    cmp #$00
     bne @shifted
+
+
+    ; check for control state
+    ldx #$14
+    lda KEYSTATE,x
+    bne @control
 
     ldx KBTEMP
     lda ps2_ascii, x
@@ -725,6 +784,14 @@ irq:
 @shifted:
     ldx KBTEMP
     lda ps2_ascii_shifted, x    
+    ldx KBCURR
+    sta KBBUF, x
+    inc KBCURR
+    jmp @exit
+
+@control:
+    ldx KBTEMP
+    lda ps2_ascii_control, x
     ldx KBCURR
     sta KBBUF, x
     inc KBCURR
@@ -749,7 +816,7 @@ ps2_ascii:
   .byte $00, "c", "x", "d", "e", "4", "3", $00, $00, " ", "v", "f", "t", "r", "5", $00; 2
   .byte $00, "n", "b", "h", "g", "y", "6", $00, $00, $00, "m", "j", "u", "7", "8", $00; 3
   .byte $00, ",", "k", "i", "o", "0", "9", $00, $00, ".", "/", "l", ";", "p", "-", $00; 4 
-  .byte $00, $00, "'", $00, "[", "=", $00, $00, $00, $00, $13, "]", $00, "\", $00, $00; 5
+  .byte $00, $00, "'", $00, "[", "=", $00, $00, $00, $00, $0D, "]", $00, "\", $00, $00; 5
   .byte $00, $00, $00, $00, $00, $00, $08, $00, $00, $00, $00, $00, $00, $00, $00, $00; 6
   .byte $00, $00, $00, $00, $00, $00, $1B, $00, $00, $00, $00, $00, $00, $00, $00, $00; 7
 
@@ -760,18 +827,23 @@ ps2_ascii_shifted:
   .byte $00, "C", "X", "D", "E", "$", "#", $00, $00, " ", "V", "F", "T", "R", "%", $00; 2
   .byte $00, "N", "B", "H", "G", "Y", "^", $00, $00, $00, "M", "J", "U", "&", "*", $00; 3
   .byte $00, "<", "K", "I", "O", ")", "(", $00, $00, ">", "?", "L", ":", "P", "_", $00; 4
-  .byte $00, $00, $22, $00, "{", "+", $00, $00, $00, $00, $13, "}", $00, "|", $00, $00; 5
+  .byte $00, $00, $22, $00, "{", "+", $00, $00, $00, $00, $0D, "}", $00, "|", $00, $00; 5
   .byte $00, $00, $00, $00, $00, $00, $08, $00, $00, $00, $00, $00, $00, $00, $00, $00; 6
   .byte $00, $00, $00, $00, $00, $00, $03, $00, $00, $00, $00, $00, $00, $00, $00, $00; 7
-  
-;      0123456789ABCDEF
-  ;.byte "??????????????`?" ; 0
-  ;.byte "?????Q!???ZSAW@?" ; 1
-  ;.byte "?CXDE$#?? VFTR%?" ; 2
-  ;.byte "?NBHGY^???MJU&*?" ; 3
-  ;.  .byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00; 6
-  ;.byte "??", $22, "?{+?????}?|??" ; 5
+ 
 
+ps2_ascii_control:
+  ;      0   1    2    3    4    5    6    7    8    9    A    B    C    D    E    F
+  .byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, "~", $00; 0
+  .byte $00, $00, $00, $00, $00, $11, "!", $00, $00, $00, $1A, $13, $01, $17, "@", $00; 1
+  .byte $00, $03, $18, $04, $05, "$", "#", $00, $00, " ", $16, $06, $14, $12, "%", $00; 2
+  .byte $00, $0E, $02, $08, $07, $19, "^", $00, $00, $00, $0D, $0A, $15, "&", "*", $00; 3
+  .byte $00, "<", $0B, $09, $0F, ")", "(", $00, $00, ">", "?", $0C, ":", $10, "_", $00; 4
+  .byte $00, $00, $22, $00, "{", "+", $00, $00, $00, $00, $0D, "}", $00, "|", $00, $00; 5
+  .byte $00, $00, $00, $00, $00, $00, $08, $00, $00, $00, $00, $00, $00, $00, $00, $00; 6
+  .byte $00, $00, $00, $00, $00, $00, $03, $00, $00, $00, $00, $00, $00, $00, $00, $00; 7
+
+ 
 
 ; ****************************************************************************************************************
 ;  The WOZ Monitor for the Apple 1
@@ -813,7 +885,7 @@ GETLINE:        LDA #$8D        ; CR.
                 LDY #$01        ; Initialize text index.
 BACKSPACE:      DEY             ; Back up text index.
                 BMI GETLINE     ; Beyond start of line, reinitialize.
-NEXTCHAR:       jsr rx_char_sync ; Key ready?
+NEXTCHAR:       jsr read_char   ; Key ready?
                 ora #$80
                 STA IN,Y        ; Add to text buffer.
                 JSR ECHO        ; Display character.

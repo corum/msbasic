@@ -24,11 +24,11 @@ WIDTH			:= 72
 WIDTH2			:= 56
 
 ; memory layout
-RAMSTART2		:= $0300
+RAMSTART2		:= $0500
 
 ; magic memory locations
-L0200           := $0200
+L0200           := $0400
 
 ; monitor functions
-MONRDKEY        := rx_char_sync
-MONCOUT         := tx_char_sync
+MONRDKEY        := read_char
+MONCOUT         := display_char
