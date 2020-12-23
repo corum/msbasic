@@ -1,50 +1,66 @@
 ; memory map
-; 0x0000 - 0x7FFF  RAM (32KB)
-; 0x8000 - 0x8FFF  Devices (4KB) 16 devices, 256 bytes each, D1 = 0x8000-0x80FF, D2= 0x8100-0x81FF ...
-; 0x9000 - 0xFFFF  ROM (28KB)
+; 0x0000 - 0x7EFF  RAM (31K)
+; 0x7F00 - 0x7FFF  Devices (256 bytes) 16 devices, 16 bytes each, D1 = 0x7F00-0x7F0F, D2= 0x7F10-0x7F1F ...
+; 0x8000 - 0xFFFF  ROM (32KB)
+; Write to video memory by writing to ROM address space
+; Write to text video memory by writing to ROM address space in 8000-BFFF , top nibble is row, bottom nibble is column - for row only 6 bits are used
+; Text buffer is shadowed in RAM to enable scroling.  Shadow buffer is calculated by subtracting $25 from the high byte
+; Text buffer only has $24 lines, so translates to the range of $5B00-$7F00 
+ 
 
 .segment "CODE"
 
-PORTB   = $8000
-PORTA   = $8001
-DDRB    = $8002
-DDRA    = $8003
-SHCTL   = $800A
-ACR     = $800B     ; auxiliary control register
-PCR     = $800C     ; peripheral control register
-IFR     = $800D 
-IER     = $800E     ; interrupt enable register
+; devices
+;VIA D0
+PORTB   = $7F00
+PORTA   = $7F0F     ; PORTA is register 1, this is PORTA with no handshake
+DDRB    = $7F02
+DDRA    = $7F03
+SHCTL   = $7F0A
+ACR     = $7F0B     ; auxiliary control register
+PCR     = $7F0C     ; peripheral control register
+IFR     = $7F0D 
+IER     = $7F0E     ; interrupt enable register
+
+;ACIA D1
+A_RXD   = $7F10
+A_TXD   = $7F10
+A_STS   = $7F11
+A_RES   = $7F11
+A_CMD   = $7F12
+A_CTL   = $7F13
+
+;Latch D2
+LATCH   = $7F20     ; Latch
 
 ;VIA config flags 
 ICLR   = %01111111  ; clear all VIA interrupts
 IMASK  = %10000001  ; enable interrupt for CA1
-CFGCA  = %00000010  ; configure CA1 for negative active edge for PS/2 clock
+CFGCA  = %00000010  ; configure CA2 for negative active edge for PS/2 clock
 ACRCFG = %00000011  ; enable latching
 
-;ACIA
-A_RXD = $8100
-A_TXD = $8100
-A_STS = $8101
-A_RES = $8101
-A_CMD = $8102
-A_CTL = $8103
-
 ;LCD bits
-E     = %10000000
-RW    = %01000000
-RS    = %00100000
+E      = %10000000
+RW     = %01000000
+RS     = %00100000
 
 ;DISPLAY RAM LOCATIONS
-COORD  = $80
-SHADOW = $90
+TEXT      = $80
+STEXT     = $82
 
-COLVAL = $80
-ROWVAL = $81
+COLVAL    = $80
+ROWVAL    = $81
 
-SHADOWCOL = $90
-SHADOWROW = $91
+SCOLVAL   = $82
+SROWVAL   = $83
 
-; PS/2 keyboard state
+; CONSTANT
+ROWCOUNT  = $26
+MAXROW    = $A4
+MAXROWM1  = $A3
+MAXCOL    = $65
+
+; PS/2 keyboard memory locations
 KBSTATE   = $A0
 KBTEMP    = $A1
 KBCURR    = $A2
@@ -55,14 +71,14 @@ KBDBG     = $A6
 KBDBG2    = $A7
 KEYTEMP   = $A8
 
-KBBUF    = $100
-KEYSTATE = $200
+KBBUF     = $200
+KEYSTATE  = $400
 
-; keyboard processing states
-PS2_START   = $00
-PS2_KEYS    = $01
-PS2_PARITY  = $02
-PS2_STOP    = $03
+; keyboard processing states constants
+PS2_START = $00
+PS2_KEYS  = $01
+PS2_PARITY= $02
+PS2_STOP  = $03
 
 ;CODE
 init:
@@ -73,36 +89,7 @@ init:
     txs
 
     stz INPUTBUFFER
-
-; init display variables, column and row, shadow column and shadow row
-    lda #$00
-    sta COLVAL
-    sta SHADOWCOL
-
-    lda #$C0
-    sta ROWVAL
-    and #$7F
-    sta SHADOWROW
-
-
-; init PS/2 kb stuff
-    lda #$00
-    sta KBSTATE
-    sta KBTEMP
-    sta KBCURR
-    sta KBBIT
-    sta KBEXTEND
-    sta KBKEYUP
-    sta KBDBG
-    sta KBDBG2
-
-    ldx #$00           ; clear the key state and input buffers
-@clrbufx:
-    sta KEYSTATE, x
-    sta KBBUF, x
-    inx
-    cpx #$00
-    bne @clrbufx
+    stz LATCH
 
 ; initialize the ACIA
     sta A_RES      ; soft reset (value not important)
@@ -132,9 +119,38 @@ init:
     lda #%00000001 ; clear the display
     jsr lcd_instruction
 
-    jsr print_message
+; init display variables, column and row, shadow column and shadow row
+    lda #$00
+    sta COLVAL
+    sta SCOLVAL
 
-    jsr cls
+    lda #$80
+    sta ROWVAL
+    sbc #ROWCOUNT        ; subtract $26 to get shadow row
+    sta SROWVAL
+
+
+; init PS/2 kb stuff
+    lda #$00
+    sta KBSTATE
+    sta KBTEMP
+    sta KBCURR
+    sta KBBIT
+    sta KBEXTEND
+    sta KBKEYUP
+    sta KBDBG
+    sta KBDBG2
+
+    ldx #$00           ; clear the key state and input buffers
+@clrbufx:
+    sta KEYSTATE, x
+    sta KBBUF, x
+    inx
+    cpx #$00
+    bne @clrbufx
+
+; Print message on the LCD
+    jsr print_message
 
 ; initialize VIA for keyboard processing
     lda #ICLR
@@ -144,18 +160,18 @@ init:
     sta IER
 
     lda #CFGCA
-    sta PCR        ; configure CB21for negative active edge and independent interrupt
+    sta PCR        ; configure CB1 for negative active edge and independent interrupt
 
     lda #ACRCFG
     sta ACR
+
+    ;jsr cls
     
     cli
-
-    jmp WOZMON
-
-
-loop:
-    jmp loop       ; repeat
+    
+@loop:
+    jsr WOZMON
+    jmp @loop
 
 message: .asciiz "Badger6502"
 
@@ -260,7 +276,7 @@ rx_line_sync:
     beq @eol               ;  end of line
     sta INPUTBUFFER, y     ;  store in the input buffer
     iny                    ;  next character
-    cpy #$80               ;  80'th character? force end of line
+    cpy #$80               ;  $80'th character? force end of line
     beq @eol               ;  end of line
 
     jmp @loop              ;  repeat to read next character
@@ -338,8 +354,8 @@ print_message:
     inx
     
     jsr print_char
-
     ;jsr tx_char
+
     jmp @loop
 @return:
     rts
@@ -404,8 +420,8 @@ read_char:
 
 ; DISPLAY 
 display_char:
-    jsr output_char
     jsr tx_char_sync
+    jsr output_char
     rts
 
 new_line:
@@ -414,7 +430,7 @@ new_line:
     sta COLVAL    ; column goes to 0
     inc ROWVAL
     lda ROWVAL
-    cmp #$E3      ; if row 23
+    cmp #MAXROW      ; if row 23
     bne @exit
     jsr scroll    ; clear screen
 @exit:
@@ -425,7 +441,7 @@ inc_col:
     pha
     inc COLVAL    
     lda COLVAL
-    cmp #$61
+    cmp #MAXCOL
     bne @exit
     jsr new_line
 @exit:
@@ -448,9 +464,9 @@ backspace:
 output_char:
     phx
     ldx COLVAL
-    stx $E300
+    stx $A400
     ldx ROWVAL
-    stx $E302
+    stx $A402
     plx
 
     cmp #$03
@@ -477,10 +493,6 @@ output_char:
     bra @exit
 
 @clear:
-    lda #$00
-    sta COLVAL
-    lda #$C0
-    sta ROWVAL
     jsr cls
     bra @exit
 
@@ -502,18 +514,18 @@ write_char:
     phy
 
     ldy #$00 
-    sta (COORD),y    
+    sta (TEXT),y    
 
     pha
     lda ROWVAL
-    and #$7F
-    sta SHADOWROW
+    sbc #ROWCOUNT
+    sta SROWVAL
     
     lda COLVAL
-    sta SHADOWCOL
+    sta SCOLVAL
     pla
 
-    sta (SHADOW),y
+    sta (STEXT),y
 
     ply
     rts
@@ -528,39 +540,34 @@ cls:
     ldy #$00
     ldx #$00
     stx COLVAL 
-    stx SHADOWCOL
-    lda #$BF
+    stx SCOLVAL
+    lda #$7F
     sta ROWVAL
-    and #$7F
-    sta SHADOWROW
-
+    sbc #ROWCOUNT
+    sta SROWVAL
     lda #$00
    
-@loopy:
-    ldy #$00
-    inc ROWVAL
-    inc SHADOWROW
-
-@loopx:
-    sta (COORD),y
-    sta (SHADOW),y
-    iny
-    cpy #$FF
-    bne @loopx    
-
-    ldy #$00
-    ldx ROWVAL
-    cpx #$E6
-    bne @loopy
-    
+@cls_loopy:
     ldx #$00
-    stx COLVAL
-    stx SHADOWCOL
+    inc ROWVAL
+    inc SROWVAL
 
-    ldx #$C0
-    stx ROWVAL
-    and #$7F
-    stx SHADOWROW
+@cls_loopx:
+    sta (TEXT),y
+    sta (STEXT),y
+    iny
+    cpy #MAXCOL
+    bne @cls_loopx    
+    ldy #$00
+
+    ldx ROWVAL
+    cpx #MAXROW
+    bne @cls_loopy
+
+    lda #$80
+    sta ROWVAL
+    sbc #ROWCOUNT
+    sta SROWVAL
 
     ply
     plx
@@ -574,50 +581,45 @@ scroll:
 
     lda #$00
     sta COLVAL
-    sta SHADOWCOL
+    sta SCOLVAL
 
-    lda #$C0
+    lda #$80
     sta ROWVAL
-    and #$7F
-    sta SHADOWROW
+    sbc #ROWCOUNT 
+    sta SROWVAL
 
 @looprow:
     ldy #$00
     inc ROWVAL
-    inc SHADOWROW
+    inc SROWVAL
 
 @loopcol:
-    lda (SHADOW),y
+    lda (STEXT),y
     dec ROWVAL
-    dec SHADOWROW
+    dec SROWVAL
 
-    sta (COORD),y
-    sta (SHADOW),y
+    sta (TEXT),y
+    sta (STEXT),y
 
     inc ROWVAL
-    inc SHADOWROW
+    inc SROWVAL
 
     iny
-    cpy #$64
+    cpy #MAXCOL
     bne @loopcol
 
     lda ROWVAL
-    cmp #$E3
+    cmp #MAXROWM1
     bne @looprow
 
-    lda #$00
-    sta COLVAL
-    sta SHADOWCOL
-
-    lda #$E2
+    lda #$A2
     sta ROWVAL    
-    and #$7F
-    sta SHADOWROW
+    sbc #ROWCOUNT    
+    sta SROWVAL
 
     ply
     pla
     rts
-
 
 
 nmi:
@@ -628,16 +630,16 @@ irq:
     phx
     phy
 
-    ; check the IFR to see if it's the VIA - aka the keyboard
-    lda IFR
-    bne @ps2_keyboard_decode
-    
     ; check the ACIA status register to see if we've received data
     ; reading the status register clears the irq bit
     lda A_STS
     and #%00001000   ; check receive bit
     bne @irq_receive
 
+    ; check the IFR to see if it's the VIA - aka the keyboard
+    lda IFR
+    bne @ps2_keyboard_decode
+    
     jmp @exit
 
 

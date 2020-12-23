@@ -15,4 +15,6 @@
         jmp     COLD_START
         jmp     RESTART
         jmp     _cls
+        jmp     MONRDKEY
+        jmp     MONCOUT
 .endif

@@ -17,7 +17,7 @@ ZP_START4 = $65
 USR             := $000A
 
 ; constants
-STACK_TOP		:= $FC
+STACK_TOP		:= $FF
 SPACE_FOR_GOSUB := $33
 NULL_MAX		:= $0A
 WIDTH			:= 72

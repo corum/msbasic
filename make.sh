@@ -9,6 +9,8 @@ ca65 --cpu 65C02 -t none -D $i msbasic.s -o tmp/$i.o &&
 ld65 -C $i.cfg tmp/$i.o -o tmp/$i.bin -Ln tmp/$i.lbl
 
 cp tmp/badger6502.bin /mnt/c/6502/badger6502.bin
+cp tmp/badger6502.lbl /mnt/c/6502/badger6502.lbl
 
 done
+
 
