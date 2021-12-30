@@ -10,28 +10,38 @@
 
 .segment "CODE"
 
+;ACIA D0
+A_RXD   = $7F00
+A_TXD   = $7F00
+A_STS   = $7F01
+A_RES   = $7F01
+A_CMD   = $7F02
+A_CTL   = $7F03
+
 ; devices
-;VIA D0
-PORTB   = $7F00
-PORTA   = $7F0F     ; PORTA is register 1, this is PORTA with no handshake
-DDRB    = $7F02
-DDRA    = $7F03
-SHCTL   = $7F0A
-ACR     = $7F0B     ; auxiliary control register
-PCR     = $7F0C     ; peripheral control register
-IFR     = $7F0D 
-IER     = $7F0E     ; interrupt enable register
+;VIA D1
+PORTB   = $7F10
+PORTA   = $7F1F     ; PORTA is register 1, this is PORTA with no handshake
+DDRB    = $7F12
+DDRA    = $7F13
+SHCTL   = $7F1A
+ACR     = $7F1B     ; auxiliary control register
+PCR     = $7F1C     ; peripheral control register
+IFR     = $7F1D 
+IER     = $7F1E     ; interrupt enable register
 
-;ACIA D1
-A_RXD   = $7F10
-A_TXD   = $7F10
-A_STS   = $7F11
-A_RES   = $7F11
-A_CMD   = $7F12
-A_CTL   = $7F13
+; devices
+;VIA2 D2
+PORTB2   = $7F20
+PORTA2   = $7F2F     ; PORTA is register 1, this is PORTA with no handshake
+DDRB2    = $7F22
+DDRA2    = $7F23
+SHCTL2   = $7F2A
+ACR2     = $7F2B     ; auxiliary control register
+PCR2     = $7F2C     ; peripheral control register
+IFR2     = $7F2D 
+IER2     = $7F2E     ; interrupt enable register
 
-;Latch D2
-LATCH   = $7F20     ; Latch
 
 ;VIA config flags 
 ICLR   = %01111111  ; clear all VIA interrupts
@@ -53,6 +63,8 @@ ROWVAL    = $81
 
 SCOLVAL   = $82
 SROWVAL   = $83
+
+GRAPHMODE = $84
 
 ; CONSTANT
 ROWCOUNT  = $26
@@ -89,7 +101,7 @@ init:
     txs
 
     stz INPUTBUFFER
-    stz LATCH
+    stz GRAPHMODE
 
 ; initialize the ACIA
     sta A_RES      ; soft reset (value not important)
@@ -110,14 +122,14 @@ init:
     lda #%11100000 ; Set 3 pins on port A for output
     sta DDRA
 
-    lda #%00111000 ; set 8-bit mode, 2-line display, 5x8 font
-    jsr lcd_instruction
-    lda #%00001110 ; display on cursor on blink off
-    jsr lcd_instruction
-    lda #%00000110 ; increment and shift cursor; don't shift entire display
-    jsr lcd_instruction
-    lda #%00000001 ; clear the display
-    jsr lcd_instruction
+;    lda #%00111000 ; set 8-bit mode, 2-line display, 5x8 font
+;    jsr lcd_instruction
+;    lda #%00001110 ; display on cursor on blink off
+;    jsr lcd_instruction
+;    lda #%00000110 ; increment and shift cursor; don't shift entire display
+;    jsr lcd_instruction
+;    lda #%00000001 ; clear the display
+;    jsr lcd_instruction
 
 ; init display variables, column and row, shadow column and shadow row
     lda #$00
@@ -150,7 +162,7 @@ init:
     bne @clrbufx
 
 ; Print message on the LCD
-    jsr print_message
+;    jsr print_message
 
 ; initialize VIA for keyboard processing
     lda #ICLR
@@ -233,6 +245,18 @@ tx_message:
 @exit:
     rts
 
+wdc_pause:
+    phx
+    ldx #0
+
+@wdc_pause_loop:
+    inx
+    cpx #$80
+    bne @wdc_pause_loop
+
+    plx
+    rts
+
 tx_char_sync:
     pha
 @wait:
@@ -242,6 +266,10 @@ tx_char_sync:
 
     pla
     sta A_TXD
+
+    ; workaround for WDC chip
+    jsr wdc_pause
+
     rts
 
 rx_char_sync:
@@ -426,6 +454,10 @@ display_char:
 
 new_line:
     pha
+    lda GRAPHMODE
+    cmp #$00
+    bne @exit
+
     lda #$00
     sta COLVAL    ; column goes to 0
     inc ROWVAL
@@ -462,12 +494,12 @@ backspace:
     rts
 
 output_char:
-    phx
-    ldx COLVAL
-    stx $A400
-    ldx ROWVAL
-    stx $A402
-    plx
+    ;phx
+    ;ldx COLVAL
+    ;stx $A400
+    ;ldx ROWVAL
+    ;stx $A402
+    ;plx
 
     cmp #$03
     beq wozmon
@@ -513,6 +545,10 @@ wozmon:
 write_char:
     phy
 
+    ldy GRAPHMODE
+    cpy #$00
+    bne @exit
+
     ldy #$00 
     sta (TEXT),y    
 
@@ -526,7 +562,7 @@ write_char:
     pla
 
     sta (STEXT),y
-
+@exit:
     ply
     rts
 
