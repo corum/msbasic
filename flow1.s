@@ -244,7 +244,7 @@ END4:
 L2701:
         lda     #<QT_BREAK
         ldy     #>QT_BREAK
-.ifndef KBD
+.if .def(KBD)
         ldx     #$00
         stx     Z14
 .endif
@@ -252,7 +252,7 @@ L2701:
         jmp     PRINT_ERROR_LINNUM
 L270E:
         jmp     RESTART
-.ifdef KBD
+.if .def(KBD)
 LE664:
         tay
         jmp     SNGFLT
@@ -278,7 +278,7 @@ L271C:
 RET1:
         rts
 
-.ifdef KBD
+.if .def(KBD)
 PRT:
         jsr     GETBYT
         txa

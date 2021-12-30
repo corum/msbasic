@@ -93,7 +93,7 @@ LE878:
 
 .ifndef KBD
 L29B9:
-  .ifdef CBM2
+  .if .def(CBM2)
         lda     #$00
         sta     INPUTBUFFER,x
         ldx     #<(INPUTBUFFER-1)
@@ -112,8 +112,7 @@ L29B9:
         lda     CURDVC
         bne     L29DD
   .endif
-.endif
-
+.endif 
 
 CRDO:
 .if .def(CONFIG_PRINTNULLS) && .def(CONFIG_FILE)
@@ -381,7 +380,7 @@ L2A4E:
 .ifdef CONFIG_MONCOUT_DESTROYS_Y
         ldy     DIMFLG
 .endif
-.if .def(OSI) || .def(BADGER6502)
+.if .def(OSI)
         nop
         nop
         nop

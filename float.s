@@ -86,7 +86,7 @@ L365B:
         lda     ARG
 FADD2:
         tay
-.ifdef KBD
+.if .def(KBD)
         beq     RTS4
 .else
         beq     RTS3
@@ -1391,7 +1391,7 @@ CON_BILLION:
 ; PRINT "IN <LINE #>"
 ; ----------------------------------------------------------------------------
 INPRT:
-.ifdef KBD
+.if .def(KBD)
         jsr     LFE0B
         .byte	" in"
         .byte	0

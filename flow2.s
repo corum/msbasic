@@ -57,7 +57,7 @@ L2809:
         lda     TXTTAB
         ldx     TXTTAB+1
 L280D:
-.ifdef KBD
+.if .def(KBD)
         jsr     LF457
         bne     UNDERR
 .else

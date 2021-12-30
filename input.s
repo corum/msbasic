@@ -122,6 +122,7 @@ INPUT:
 .ifndef KBD
         lsr     Z14
 .endif
+
 .ifdef AIM65
         lda     PRIFLG
         sta     ZBE

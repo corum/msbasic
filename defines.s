@@ -1,4 +1,8 @@
-.if .def(cbmbasic1)
+.if .def(badger6502)
+BADGER6502 := 1
+CBM2 := 1
+.include "defines_badger6502.s"
+.elseif .def(cbmbasic1)
 CBM1 := 1
 .include "defines_cbm1.s"
 .elseif .def(osi)
@@ -25,9 +29,7 @@ AIM65 := 1
 .elseif .def(sym1)
 SYM1 := 1
 .include "defines_sym1.s"
-.elseif .def(badger6502)
-BADGER6502 := 1
-.include "defines_badger6502.s"
+
 .endif
 
 .ifdef CONFIG_2C

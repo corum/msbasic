@@ -2,7 +2,7 @@
 
 .ifndef CONFIG_NO_INPUTBUFFER_ZP
 L2420:
-  .if .def(OSI) || .def(BADGER6502)
+  .if .def(OSI)
         jsr     OUTDO
   .endif
         dex
@@ -16,7 +16,7 @@ LB35F:
         bpl     INLIN2
   .endif
 L2423:
-  .if .def(OSI) || .def(BADGER6502)
+  .if .def(OSI)
         jsr     OUTDO
   .endif
         jsr     CRDO
@@ -99,7 +99,7 @@ L2443:
     .endif
         sta     INPUTBUFFER,x
         inx
-    .if .def(OSI) || .def(AIM65) || .def(BADGER6502)
+    .if .def(OSI) || .def(AIM65)
         .byte   $2C
     .else
         bne     INLIN2
@@ -126,7 +126,7 @@ GETLN:
     .else
         jsr     MONRDKEY
     .endif
-    .if .def(OSI) || .def(BADGER6502)
+    .if .def(OSI)
         nop
         nop
         nop

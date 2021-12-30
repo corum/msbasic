@@ -1,6 +1,6 @@
 .segment "INIT"
 
-.ifdef KBD
+.if .def(KBD) 
 FNDLIN2:
         php
         jmp     FNDLIN
@@ -19,11 +19,12 @@ PR_WRITTEN_BY:
     .endif
   .endif
 .endif
+
 COLD_START:
 .ifdef SYM1
         jsr     ACCESS
 .endif
-.ifdef KBD
+.if .def(KBD)
         lda     #<LFD81
         sta     $03A0
         lda     #>LFD81
@@ -142,7 +143,7 @@ COLD_START:
 ; copies four bytes too many, which is no
 ; problem.
 .ifdef CONFIG_SMALL
-  .ifdef KBD
+  .if .def(KBD)
         ldx     #GENERIC_CHRGET_END-GENERIC_CHRGET+4
   .else
         ldx     #GENERIC_CHRGET_END-GENERIC_CHRGET
@@ -159,7 +160,7 @@ L4098:
         lda     #$03
         sta     DSCLEN
 .endif
-.ifndef KBD
+.ifndef KBD 
         txa
         sta     SHIFTSIGNEXT
   .ifdef CONFIG_CBM_ALL
@@ -224,6 +225,7 @@ L4098:
         tay
         bne     L40EE
 .endif
+
 .ifndef CBM2
         lda     #<RAMSTART2
 .endif
@@ -441,7 +443,7 @@ L4192:
         jmp     (GORESTART+1)
 .endif
 
-  .if .def(CONFIG_RAM) || .def(OSI) || .def(BADGER6502)
+  .if .def(CONFIG_RAM) || .def(OSI)
 ; OSI is compiled for ROM, but includes
 ; this unused string
 QT_WANT:
@@ -488,10 +490,7 @@ QT_BASIC:
   .ifdef OSI
         .byte   "OSI 6502 BASIC VERSION 1.0 REV 3.2"
   .endif
-  .ifdef BADGER6502
-        .byte   "MICROSOFT 6502 BASIC VERSION 1.0 REV 3.2"
-  .endif
-  .ifdef KIM
+  .if .def(KIM)
         .byte   "MOS TECH 6502 BASIC V1.1"
   .endif
   .ifdef MICROTAN

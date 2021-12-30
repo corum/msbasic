@@ -593,7 +593,7 @@ L2DF4:
         sta     JMPADRS+1
         lda     UNFNC-TOKEN_SGN-TOKEN_SGN+$101,y
         sta     JMPADRS+2
-.ifdef KBD
+.if .def(KBD)
         jsr     LF47D
 .else
         jsr     JMPADRS

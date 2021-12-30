@@ -5,15 +5,24 @@
 
 .segment "CODE"
 
-PORTB   = $8000
-PORTA   = $8001
-DDRB    = $8002
-DDRA    = $8003
-SHCTL   = $800A
-ACR     = $800B     ; auxiliary control register
-PCR     = $800C     ; peripheral control register
-IFR     = $800D 
-IER     = $800E     ; interrupt enable register
+; ACIA
+A_RXD = $8000
+A_TXD = $8000
+A_STS = $8001
+A_RES = $8001
+A_CMD = $8002
+A_CTL = $8003
+
+; VIA
+PORTB   = $8100
+PORTA   = $8101
+DDRB    = $8102
+DDRA    = $8103
+SHCTL   = $810A
+ACR     = $810B     ; auxiliary control register
+PCR     = $810C     ; peripheral control register
+IFR     = $810D 
+IER     = $810E     ; interrupt enable register
 
 ;VIA config flags 
 ICLR   = %01111111  ; clear all VIA interrupts
@@ -21,13 +30,6 @@ IMASK  = %10000001  ; enable interrupt for CA1
 CFGCA  = %00000010  ; configure CA1 for negative active edge for PS/2 clock
 ACRCFG = %00000011  ; enable latching
 
-;ACIA
-A_RXD = $8100
-A_TXD = $8100
-A_STS = $8101
-A_RES = $8101
-A_CMD = $8102
-A_CTL = $8103
 
 ;LCD bits
 E     = %10000000
@@ -56,7 +58,9 @@ KBDBG2    = $A7
 KEYTEMP   = $A8
 
 KBBUF    = $100
-KEYSTATE = $200
+KEYSTATE = $7F00
+
+INPUTBUF = $300
 
 ; keyboard processing states
 PS2_START   = $00
@@ -72,6 +76,7 @@ init:
     ldx #STACK_TOP
     txs
 
+    stz INPUTBUF
     stz INPUTBUFFER
 
 ; init display variables, column and row, shadow column and shadow row
@@ -117,40 +122,41 @@ init:
     sta A_CTL      ; program the ctl register
 
 ; initialize the LCD via the VIA
-    lda #%11111111 ; Set all pins on port B for output
-    sta DDRB
+  ;  lda #%11111111 ; Set all pins on port B for output
+  ;  sta DDRB
 
-    lda #%11100000 ; Set 3 pins on port A for output
-    sta DDRA
+  ;  lda #%11100000 ; Set 3 pins on port A for output
+  ;  sta DDRA
 
-    lda #%00111000 ; set 8-bit mode, 2-line display, 5x8 font
-    jsr lcd_instruction
-    lda #%00001110 ; display on cursor on blink off
-    jsr lcd_instruction
-    lda #%00000110 ; increment and shift cursor; don't shift entire display
-    jsr lcd_instruction
-    lda #%00000001 ; clear the display
-    jsr lcd_instruction
+  ;  lda #%00111000 ; set 8-bit mode, 2-line display, 5x8 font
+  ;  jsr lcd_instruction
+  ;  lda #%00001110 ; display on cursor on blink off
+  ;  jsr lcd_instruction
+  ;  lda #%00000110 ; increment and shift cursor; don't shift entire display
+  ;  jsr lcd_instruction
+  ;  lda #%00000001 ; clear the display
+  ;  jsr lcd_instruction
 
-    jsr print_message
+  ;  jsr print_message
 
-    jsr cls
+  ;  jsr cls
 
 ; initialize VIA for keyboard processing
-    lda #ICLR
-    sta IFR
+  ;  lda #ICLR
+  ;  sta IFR
 
-    lda #IMASK
-    sta IER
+  ;  lda #IMASK
+  ;  sta IER
 
-    lda #CFGCA
-    sta PCR        ; configure CB21for negative active edge and independent interrupt
+  ;  lda #CFGCA
+  ;  sta PCR        ; configure CB21for negative active edge and independent interrupt
 
-    lda #ACRCFG
-    sta ACR
+  ;  lda #ACRCFG
+  ;  sta ACR
     
     cli
 
+    ldy #$81
     jmp WOZMON
 
 
@@ -189,11 +195,11 @@ Backspace:
 ms_basic:
   .asciiz "Microsoft BASIC"
 
-LOAD:
-	RTS
+;LOAD:
+;	RTS
 
-SAVE:
-	RTS
+;SAVE:
+;	RTS
 
 tx_startup_message:
     ldx #0
@@ -248,47 +254,47 @@ rx_char_sync_nowait:
 @exit:
     rts
 
-rx_line_sync:
-    pha
-    phx
-    phy
-    ldy #$00               ;  init counter to 0
-@loop:
-    jsr rx_char_sync       ;  get a character, stored in A
-    jsr tx_char_sync       ;  echo
-    cmp	#$0D			         ;  compare with \r
-    beq @eol               ;  end of line
-    sta INPUTBUFFER, y     ;  store in the input buffer
-    iny                    ;  next character
-    cpy #$80               ;  80'th character? force end of line
-    beq @eol               ;  end of line
+;rx_line_sync:
+;    pha
+;    phx
+;    phy
+;    ldy #$00               ;  init counter to 0
+;@loop:
+;    jsr rx_char_sync       ;  get a character, stored in A
+;    jsr tx_char_sync       ;  echo
+;    cmp	#$0D			         ;  compare with \r
+;    beq @eol               ;  end of line
+;    sta INPUTBUF, y     ;  store in the input buffer
+;    iny                    ;  next character
+;    cpy #$80               ;  80'th character? force end of line
+;    beq @eol               ;  end of line;
 
-    jmp @loop              ;  repeat to read next character
+;    jmp @loop              ;  repeat to read next character
 
-@eol:
-    lda #$00
-    sta INPUTBUFFER, y     ; null terminate
-    ply
-    plx
-    pla
-    rts
+;@eol:
+;    lda #$00
+;    sta INPUTBUF, y     ; null terminate
+;    ply
+;    plx
+;    pla
+;    rts
 
-tx_input_buffer:
-    pha
-    phx
-    phy
-    ldx #0
-@loop:
-    lda INPUTBUFFER, x
-    beq @exit
-    inx
-    jsr tx_char_sync
-    jmp @loop
-@exit:
-    pla
-    plx
-    ply
-    rts
+;tx_input_buffer:
+;    pha
+;    phx
+;    phy
+;    ldx #0
+;@loop:
+;    lda INPUTBUF, x
+;    beq @exit
+;    inx
+;    jsr tx_char_sync
+;    jmp @loop
+;@exit:
+;    pla
+;    plx
+;    ply
+;    rts
 
 lcd_wait:
     pha
@@ -373,6 +379,20 @@ tx_backspace:
     rts
 
 ; KEYBOARD
+
+read_char_async:
+    lda KBCURR
+    cmp #$00
+    beq @exit
+    jsr read_char
+@exit:
+    rts
+
+read_char_echo:
+    jsr read_char
+    jsr display_char
+    rts
+
 read_char:
     phx
 @readloop:
@@ -397,6 +417,7 @@ read_char:
     dec KBCURR
 
     lda KEYTEMP
+    clc
     cli
 
     plx
@@ -404,7 +425,7 @@ read_char:
 
 ; DISPLAY 
 display_char:
-    jsr output_char
+    ;jsr output_char
     jsr tx_char_sync
     rts
 
@@ -454,7 +475,7 @@ output_char:
     plx
 
     cmp #$03
-    beq wozmon
+    beq wozlong
 
     cmp #$0D
     beq @crlf
@@ -495,7 +516,7 @@ output_char:
 @exit:
     rts
 
-wozmon:
+wozlong:
     jmp $FF00
   
 write_char:
@@ -628,15 +649,19 @@ irq:
     phx
     phy
 
+    
     ; check the IFR to see if it's the VIA - aka the keyboard
-    lda IFR
-    bne @ps2_keyboard_decode
+    ;lda IFR
+    ;bne @ps2_keyboard_decode
     
     ; check the ACIA status register to see if we've received data
     ; reading the status register clears the irq bit
     lda A_STS
     and #%00001000   ; check receive bit
     bne @irq_receive
+
+    lda #$41
+    jsr tx_char_sync
 
     jmp @exit
 
@@ -991,6 +1016,9 @@ ECHO:           pha
                 jsr display_char
                 pla
                 RTS             ; Return.
+
+do_nothing:
+                RTS
 
 .segment "BOOTVECTORS"
     .word nmi
