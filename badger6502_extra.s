@@ -1,52 +1,79 @@
 ; memory map
-; 0x0000 - 0x7FFF  RAM (32KB)
-; 0x8000 - 0x8FFF  Devices (4KB) 16 devices, 256 bytes each, D1 = 0x8000-0x80FF, D2= 0x8100-0x81FF ...
-; 0x9000 - 0xFFFF  ROM (28KB)
+; 0x0000 - 0x7EFF  RAM (31K)
+; 0x7F00 - 0x7FFF  Devices (256 bytes) 16 devices, 16 bytes each, D1 = 0x7F00-0x7F0F, D2= 0x7F10-0x7F1F ...
+; 0x8000 - 0xFFFF  ROM (32KB)
+; Write to video memory by writing to ROM address space
+; Write to text video memory by writing to ROM address space in 8000-BFFF , top nibble is row, bottom nibble is column - for row only 6 bits are used
+; Text buffer is shadowed in RAM to enable scroling.  Shadow buffer is calculated by subtracting $25 from the high byte
+; Text buffer only has $24 lines, so translates to the range of $5B00-$7F00 
+ 
 
 .segment "CODE"
 
-; ACIA
-A_RXD = $8000
-A_TXD = $8000
-A_STS = $8001
-A_RES = $8001
-A_CMD = $8002
-A_CTL = $8003
+;ACIA D0
+A_RXD   = $7F00
+A_TXD   = $7F00
+A_STS   = $7F01
+A_RES   = $7F01
+A_CMD   = $7F02
+A_CTL   = $7F03
 
-; VIA
-PORTB   = $8100
-PORTA   = $8101
-DDRB    = $8102
-DDRA    = $8103
-SHCTL   = $810A
-ACR     = $810B     ; auxiliary control register
-PCR     = $810C     ; peripheral control register
-IFR     = $810D 
-IER     = $810E     ; interrupt enable register
+; devices
+;VIA D1
+PORTB   = $7F10
+PORTA   = $7F1F     ; PORTA is register 1, this is PORTA with no handshake
+DDRB    = $7F12
+DDRA    = $7F13
+SHCTL   = $7F1A
+ACR     = $7F1B     ; auxiliary control register
+PCR     = $7F1C     ; peripheral control register
+IFR     = $7F1D 
+IER     = $7F1E     ; interrupt enable register
+
+; devices
+;VIA2 D2
+PORTB2   = $7F20
+PORTA2   = $7F2F     ; PORTA is register 1, this is PORTA with no handshake
+DDRB2    = $7F22
+DDRA2    = $7F23
+SHCTL2   = $7F2A
+ACR2     = $7F2B     ; auxiliary control register
+PCR2     = $7F2C     ; peripheral control register
+IFR2     = $7F2D 
+IER2     = $7F2E     ; interrupt enable register
+
 
 ;VIA config flags 
 ICLR   = %01111111  ; clear all VIA interrupts
 IMASK  = %10000001  ; enable interrupt for CA1
-CFGCA  = %00000010  ; configure CA1 for negative active edge for PS/2 clock
+CFGCA  = %00000010  ; configure CA2 for negative active edge for PS/2 clock
 ACRCFG = %00000011  ; enable latching
 
 
 ;LCD bits
-E     = %10000000
-RW    = %01000000
-RS    = %00100000
+E      = %10000000
+RW     = %01000000
+RS     = %00100000
 
 ;DISPLAY RAM LOCATIONS
-COORD  = $80
-SHADOW = $90
+TEXT      = $80
+STEXT     = $82
 
-COLVAL = $80
-ROWVAL = $81
+COLVAL    = $80
+ROWVAL    = $81
 
-SHADOWCOL = $90
-SHADOWROW = $91
+SCOLVAL   = $82
+SROWVAL   = $83
 
-; PS/2 keyboard state
+GRAPHMODE = $84
+
+; CONSTANT
+ROWCOUNT  = $26
+MAXROW    = $A4
+MAXROWM1  = $A3
+MAXCOL    = $65
+
+; PS/2 keyboard memory locations
 KBSTATE   = $A0
 KBTEMP    = $A1
 KBCURR    = $A2
@@ -57,8 +84,8 @@ KBDBG     = $A6
 KBDBG2    = $A7
 KEYTEMP   = $A8
 
-KBBUF    = $100
-KEYSTATE = $7F00
+KBBUF     = $200
+KEYSTATE  = $7E00
 
 INPUTBUF = $300
 
@@ -78,16 +105,45 @@ init:
 
     stz INPUTBUF
     stz INPUTBUFFER
+    stz GRAPHMODE
+
+; initialize the ACIA
+    sta A_RES      ; soft reset (value not important)
+
+                   ; set specific modes and functions
+                   ; no parity, no echo, no Tx interrupt, Rx interrupt, enable Tx/Rx
+    lda #%00001001
+    sta A_CMD      ; store to the command register
+
+    ;lda #$00      ; 1 stop bits, 8 bit word length, external clock, 16x baud rate
+    lda #$1F       ; 1 stop bits, 8 bit word length, internal clock, 19.2k baud rate
+    sta A_CTL      ; program the ctl register
+
+; initialize the LCD via the VIA
+ ;   lda #%11111111 ; Set all pins on port B for output
+ ;   sta DDRB
+
+ ;   lda #%11100000 ; Set 3 pins on port A for output
+ ;   sta DDRA
+
+;    lda #%00111000 ; set 8-bit mode, 2-line display, 5x8 font
+;    jsr lcd_instruction
+;    lda #%00001110 ; display on cursor on blink off
+;    jsr lcd_instruction
+;    lda #%00000110 ; increment and shift cursor; don't shift entire display
+;    jsr lcd_instruction
+;    lda #%00000001 ; clear the display
+;    jsr lcd_instruction
 
 ; init display variables, column and row, shadow column and shadow row
     lda #$00
     sta COLVAL
-    sta SHADOWCOL
+    sta SCOLVAL
 
-    lda #$C0
+    lda #$80
     sta ROWVAL
-    and #$7F
-    sta SHADOWROW
+    sbc #ROWCOUNT        ; subtract $26 to get shadow row
+    sta SROWVAL
 
 
 ; init PS/2 kb stuff
@@ -109,59 +165,24 @@ init:
     cpx #$00
     bne @clrbufx
 
-; initialize the ACIA
-    sta A_RES      ; soft reset (value not important)
 
-                   ; set specific modes and functions
-                   ; no parity, no echo, no Tx interrupt, Rx interrupt, enable Tx/Rx
-    lda #%00001001
-    sta A_CMD      ; store to the command register
-
-    ;lda #$00      ; 1 stop bits, 8 bit word length, external clock, 16x baud rate
-    lda #$1F       ; 1 stop bits, 8 bit word length, internal clock, 19.2k baud rate
-    sta A_CTL      ; program the ctl register
-
-; initialize the LCD via the VIA
-  ;  lda #%11111111 ; Set all pins on port B for output
-  ;  sta DDRB
-
-  ;  lda #%11100000 ; Set 3 pins on port A for output
-  ;  sta DDRA
-
-  ;  lda #%00111000 ; set 8-bit mode, 2-line display, 5x8 font
-  ;  jsr lcd_instruction
-  ;  lda #%00001110 ; display on cursor on blink off
-  ;  jsr lcd_instruction
-  ;  lda #%00000110 ; increment and shift cursor; don't shift entire display
-  ;  jsr lcd_instruction
-  ;  lda #%00000001 ; clear the display
-  ;  jsr lcd_instruction
 
   ;  jsr print_message
 
-  ;  jsr cls
+    lda #CFGCA
+    sta PCR        ; configure CB1 for negative active edge and independent interrupt
 
-; initialize VIA for keyboard processing
-  ;  lda #ICLR
-  ;  sta IFR
+    lda #ACRCFG
+    sta ACR
 
-  ;  lda #IMASK
-  ;  sta IER
-
-  ;  lda #CFGCA
-  ;  sta PCR        ; configure CB21for negative active edge and independent interrupt
-
-  ;  lda #ACRCFG
-  ;  sta ACR
+    ;jsr cls
     
     cli
 
-    ldy #$81
-    jmp WOZMON
-
-
-loop:
-    jmp loop       ; repeat
+    lda #$9B
+@loop:
+    jsr WOZMON
+    jmp @loop
 
 message: .asciiz "Badger6502"
 
@@ -223,6 +244,18 @@ tx_message:
 @exit:
     rts
 
+wdc_pause:
+    phx
+    ldx #0
+
+@wdc_pause_loop:
+    inx
+    cpx #$80
+    bne @wdc_pause_loop
+
+    plx
+    rts
+
 tx_char_sync:
     pha
 @wait:
@@ -232,6 +265,10 @@ tx_char_sync:
 
     pla
     sta A_TXD
+
+    ; workaround for WDC chip
+    jsr wdc_pause
+
     rts
 
 rx_char_sync:
@@ -431,11 +468,15 @@ display_char:
 
 new_line:
     pha
+    lda GRAPHMODE
+    cmp #$00
+    bne @exit
+
     lda #$00
     sta COLVAL    ; column goes to 0
     inc ROWVAL
     lda ROWVAL
-    cmp #$E3      ; if row 23
+    cmp #MAXROW      ; if row 23
     bne @exit
     jsr scroll    ; clear screen
 @exit:
@@ -446,7 +487,7 @@ inc_col:
     pha
     inc COLVAL    
     lda COLVAL
-    cmp #$61
+    cmp #MAXCOL
     bne @exit
     jsr new_line
 @exit:
@@ -467,12 +508,12 @@ backspace:
     rts
 
 output_char:
-    phx
-    ldx COLVAL
-    stx $E300
-    ldx ROWVAL
-    stx $E302
-    plx
+    ;phx
+    ;ldx COLVAL
+    ;stx $A400
+    ;ldx ROWVAL
+    ;stx $A402
+    ;plx
 
     cmp #$03
     beq wozlong
@@ -522,20 +563,24 @@ wozlong:
 write_char:
     phy
 
+    ldy GRAPHMODE
+    cpy #$00
+    bne @exit
+
     ldy #$00 
-    sta (COORD),y    
+    sta (TEXT),y    
 
     pha
     lda ROWVAL
-    and #$7F
-    sta SHADOWROW
+    sbc #ROWCOUNT
+    sta SROWVAL
     
     lda COLVAL
-    sta SHADOWCOL
+    sta SCOLVAL
     pla
 
-    sta (SHADOW),y
-
+    sta (STEXT),y
+@exit:
     ply
     rts
 
@@ -549,39 +594,35 @@ cls:
     ldy #$00
     ldx #$00
     stx COLVAL 
-    stx SHADOWCOL
-    lda #$BF
+    stx SCOLVAL
+    lda #$7F
     sta ROWVAL
-    and #$7F
-    sta SHADOWROW
-
+    sbc #ROWCOUNT
+    sta SROWVAL
     lda #$00
    
-@loopy:
-    ldy #$00
+@cls_loopy:
+    ldx #$00
     inc ROWVAL
-    inc SHADOWROW
+    inc SROWVAL
 
-@loopx:
-    sta (COORD),y
-    sta (SHADOW),y
+@cls_loopx:
+    sta (TEXT),y
+    sta (STEXT),y
     iny
-    cpy #$FF
-    bne @loopx    
+    cpy #MAXCOL
+    bne @cls_loopx    
+    ldy #$00
 
     ldy #$00
     ldx ROWVAL
-    cpx #$E6
-    bne @loopy
-    
-    ldx #$00
-    stx COLVAL
-    stx SHADOWCOL
+    cpx #MAXROW
+    bne @cls_loopy
 
-    ldx #$C0
-    stx ROWVAL
-    and #$7F
-    stx SHADOWROW
+    lda #$80
+    sta ROWVAL
+    sbc #ROWCOUNT
+    sta SROWVAL
 
     ply
     plx
@@ -595,45 +636,41 @@ scroll:
 
     lda #$00
     sta COLVAL
-    sta SHADOWCOL
+    sta SCOLVAL
 
-    lda #$C0
+    lda #$80
     sta ROWVAL
-    and #$7F
-    sta SHADOWROW
+    sbc #ROWCOUNT 
+    sta SROWVAL
 
 @looprow:
     ldy #$00
     inc ROWVAL
-    inc SHADOWROW
+    inc SROWVAL
 
 @loopcol:
-    lda (SHADOW),y
+    lda (STEXT),y
     dec ROWVAL
-    dec SHADOWROW
+    dec SROWVAL
 
-    sta (COORD),y
-    sta (SHADOW),y
+    sta (TEXT),y
+    sta (STEXT),y
 
     inc ROWVAL
-    inc SHADOWROW
+    inc SROWVAL
 
     iny
-    cpy #$64
+    cpy #MAXCOL
     bne @loopcol
 
     lda ROWVAL
-    cmp #$E3
+    cmp #MAXROWM1
     bne @looprow
 
-    lda #$00
-    sta COLVAL
-    sta SHADOWCOL
-
-    lda #$E2
+    lda #$A2
     sta ROWVAL    
-    and #$7F
-    sta SHADOWROW
+    sbc #ROWCOUNT    
+    sta SROWVAL
 
     ply
     pla
