@@ -46,7 +46,7 @@ IER2     = $7F2E     ; interrupt enable register
 ;VIA config flags 
 ICLR   = %01111111  ; clear all VIA interrupts
 IMASK  = %10000001  ; enable interrupt for CA1
-CFGCA  = %00000010  ; configure CA2 for negative active edge for PS/2 clock
+CFGCA  = %00000001  ; configure CA2 for negative active edge for PS/2 clock
 ACRCFG = %00000011  ; enable latching
 
 
@@ -76,7 +76,7 @@ MAXCOL    = $65
 ; PS/2 keyboard memory locations
 KBSTATE   = $A0
 KBTEMP    = $A1
-KBCURR    = $A2
+KBCURR    = $A2 
 KBBIT     = $A3
 KBEXTEND  = $A4
 KBKEYUP   = $A5
@@ -123,7 +123,7 @@ init:
  ;   lda #%11111111 ; Set all pins on port B for output
  ;   sta DDRB
 
- ;   lda #%11100000 ; Set 3 pins on port A for output
+ ;   lda #%00000000 ; Set 3 pins on port A for output
  ;   sta DDRA
 
 ;    lda #%00111000 ; set 8-bit mode, 2-line display, 5x8 font
@@ -169,11 +169,17 @@ init:
 
   ;  jsr print_message
 
+    lda #%00000000 ; configure all VIA1 A pins for input
+    sta DDRA
+
     lda #CFGCA
-    sta PCR        ; configure CB1 for negative active edge and independent interrupt
+    sta PCR        ; configure CA2 for negative edge independent interrupt
 
     lda #ACRCFG
-    sta ACR
+    sta ACR        ; enable latching
+
+    lda #$80
+    sta IER        ; enable interrupts for CA2
 
     ;jsr cls
     
@@ -686,16 +692,17 @@ irq:
     phx
     phy
 
-    
-    ; check the IFR to see if it's the VIA - aka the keyboard
-    ;lda IFR
-    ;bne @ps2_keyboard_decode
-    
+
     ; check the ACIA status register to see if we've received data
     ; reading the status register clears the irq bit
     lda A_STS
     and #%00001000   ; check receive bit
     bne @irq_receive
+
+    ; check the IFR to see if it's the VIA - aka the keyboard
+    lda IFR
+    bne @ps2_keyboard_decode
+    
 
     lda #$41
     jsr tx_char_sync
@@ -713,6 +720,9 @@ irq:
 
 
 @ps2_keyboard_decode:
+    lda #$01
+    sta IFR   ; clear the CA2 IRQ bit
+
     lda PORTA
     ror
     ror       ; rotate into high order bit
