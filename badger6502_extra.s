@@ -84,10 +84,10 @@ KBDBG     = $A6
 KBDBG2    = $A7
 KEYTEMP   = $A8
 
-KBBUF     = $200
+KBBUF     = $7D00
 KEYSTATE  = $7E00
 
-INPUTBUF = $300
+;INPUTBUF = $300
 
 ; keyboard processing states
 PS2_START   = $00
@@ -103,7 +103,7 @@ init:
     ldx #STACK_TOP
     txs
 
-    stz INPUTBUF
+ ;   stz INPUTBUF
     stz INPUTBUFFER
     stz GRAPHMODE
 
