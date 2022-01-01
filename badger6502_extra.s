@@ -46,7 +46,7 @@ IER2     = $7F2E     ; interrupt enable register
 ;VIA config flags 
 ICLR   = %01111111  ; clear all VIA interrupts
 IMASK  = %10000001  ; enable interrupt for CA1
-CFGCA  = %00000001  ; configure CA2 for negative active edge for PS/2 clock
+CFGCA  = %00000011  ; configure CA2 for negative active edge for PS/2 clock
 ACRCFG = %00000011  ; enable latching
 
 
