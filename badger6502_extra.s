@@ -20,33 +20,33 @@ A_CTL   = $7F03
 
 ; devices
 ;VIA D1
-PORTB   = $7F10
-PORTA   = $7F1F     ; PORTA is register 1, this is PORTA with no handshake
-DDRB    = $7F12
-DDRA    = $7F13
-SHCTL   = $7F1A
-ACR     = $7F1B     ; auxiliary control register
-PCR     = $7F1C     ; peripheral control register
-IFR     = $7F1D 
-IER     = $7F1E     ; interrupt enable register
+PORTB   = $7F20
+PORTA   = $7F2F     ; PORTA is register 1, this is PORTA with no handshake
+DDRB    = $7F22
+DDRA    = $7F23
+SHCTL   = $7F2A
+ACR     = $7F2B     ; auxiliary control register
+PCR     = $7F2C     ; peripheral control register
+IFR     = $7F2D 
+IER     = $7F2E     ; interrupt enable register
 
 ; devices
 ;VIA2 D2
-PORTB2   = $7F20
-PORTA2   = $7F2F     ; PORTA is register 1, this is PORTA with no handshake
-DDRB2    = $7F22
-DDRA2    = $7F23
-SHCTL2   = $7F2A
-ACR2     = $7F2B     ; auxiliary control register
-PCR2     = $7F2C     ; peripheral control register
-IFR2     = $7F2D 
-IER2     = $7F2E     ; interrupt enable register
+PORTB2   = $7F10
+PORTA2   = $7F1F     ; PORTA is register 1, this is PORTA with no handshake
+DDRB2    = $7F12
+DDRA2    = $7F13
+SHCTL2   = $7F1A
+ACR2     = $7F1B     ; auxiliary control register
+PCR2     = $7F1C     ; peripheral control register
+IFR2     = $7F1D 
+IER2     = $7F1E     ; interrupt enable register
 
 
 ;VIA config flags 
 ICLR   = %01111111  ; clear all VIA interrupts
-IMASK  = %10000001  ; enable interrupt for CA1
-CFGCA  = %00000011  ; configure CA2 for negative active edge for PS/2 clock
+IMASK  = %10000011 ; enable interrupt for CA1
+CFGCA  = %00000010  ; configure CA2 for negative active edge for PS/2 clock
 ACRCFG = %00000011  ; enable latching
 
 
@@ -171,15 +171,20 @@ init:
 
     lda #%00000000 ; configure all VIA1 A pins for input
     sta DDRA
+    ;sta DDRA2
 
     lda #CFGCA
     sta PCR        ; configure CA2 for negative edge independent interrupt
+    ;sta PCR2
 
-    lda #ACRCFG
-    sta ACR        ; enable latching
+    ;lda #ACRCFG
+    ;sta ACR        ; enable latching
 
-    lda #$80
-    sta IER        ; enable interrupts for CA2
+    lda #$83
+    sta IER        ; enable interrupts for CA1 and CA2
+    
+    ;lda #$80
+    ;sta IER2
 
     ;jsr cls
     
@@ -720,9 +725,6 @@ irq:
 
 
 @ps2_keyboard_decode:
-    lda #$01
-    sta IFR   ; clear the CA2 IRQ bit
-
     lda PORTA
     ror
     ror       ; rotate into high order bit
