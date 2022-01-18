@@ -259,10 +259,15 @@ wdc_pause:
     phx
     ldx #0
 
-@wdc_pause_loop:
+@wdc_pause_loop1:
     inx
-    cpx #$80
-    bne @wdc_pause_loop
+    cpx #$00
+    bne @wdc_pause_loop1
+
+@wdc_pause_loop2:
+    inx
+    cpx #$00
+    bne @wdc_pause_loop2
 
     plx
     rts
