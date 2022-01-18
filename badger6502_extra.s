@@ -83,6 +83,7 @@ KBKEYUP   = $A5
 KBDBG     = $A6
 KBDBG2    = $A7
 KEYTEMP   = $A8
+KEYLAST   = $A9
 
 KBBUF     = $7D00
 KEYSTATE  = $7E00
@@ -823,6 +824,7 @@ irq:
     lda #$01
     ora KBEXTEND
     sta KEYSTATE, x
+    stx KEYLAST
 
     ; check for non printable 
     ldx KBTEMP         ; store in buffer only if it's a key down for now
