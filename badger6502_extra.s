@@ -88,6 +88,13 @@ KEYLAST   = $A9
 KBBUF     = $7D00
 KEYSTATE  = $7E00
 
+ORIGIN         = $B0 
+ORIGIN_H       = $B1
+DRAW_WIDTH     = $B2
+DRAW_HEIGHT    = $B3
+DRAW_COLOR     = $B4
+TEMP           = $B5
+
 ;INPUTBUF = $300
 
 ; keyboard processing states
@@ -187,7 +194,7 @@ init:
     ;lda #$80
     ;sta IER2
 
-    ;jsr cls
+    jsr cls
     
     cli
 
@@ -596,50 +603,57 @@ write_char:
     ply
     rts
 
-
-_cls:
 cls:
+_cls:
+    pha
+    phy
+    lda #$80
+    ldy #$00
+
+    sty $00
+    sta $01       ; address containing address to write to
+    
+    lda #$00
+    clc
+@clsloop:
+    sta ($00),y
+    iny
+    bne @clsloop
+
+    inc $01
+    bne @clsloop  
+    ply
+    pla
+    rts
+
+;draw a rectangle
+
+draw_rect:
     pha
     phx
     phy
 
-    ldy #$00
-    ldx #$00
-    stx COLVAL 
-    stx SCOLVAL
-    lda #$7F
-    sta ROWVAL
-    sbc #ROWCOUNT
-    sta SROWVAL
-    lda #$00
-   
-@cls_loopy:
-    ldx #$00
-    inc ROWVAL
-    inc SROWVAL
+    ;stx DRAW_WIDTH
+    ;sty DRAW_HEIGHT
+    lda DRAW_COLOR
 
-@cls_loopx:
-    sta (TEXT),y
-    sta (STEXT),y
+    ldx #$00
+@dr_looprow:
+    ldy #$00
+@dr_loopcol:
+	sta (ORIGIN),Y
     iny
-    cpy #MAXCOL
-    bne @cls_loopx    
-    ldy #$00
+	cpy DRAW_WIDTH
+	bne @dr_loopcol
 
-    ldy #$00
-    ldx ROWVAL
-    cpx #MAXROW
-    bne @cls_loopy
-
-    lda #$80
-    sta ROWVAL
-    sbc #ROWCOUNT
-    sta SROWVAL
+    inc ORIGIN_H
+    inx
+	cpx DRAW_HEIGHT
+	bne @dr_looprow
 
     ply
     plx
     pla
-
     rts
 
 scroll:
