@@ -94,6 +94,10 @@ DRAW_WIDTH     = $B2
 DRAW_HEIGHT    = $B3
 DRAW_COLOR     = $B4
 TEMP           = $B5
+X1             = $B6
+X2             = $B7
+Y1             = $B8
+Y2             = $B9
 
 ;INPUTBUF = $300
 
@@ -633,8 +637,22 @@ draw_rect:
     phx
     phy
 
-    ;stx DRAW_WIDTH
-    ;sty DRAW_HEIGHT
+    lda X2
+    clc
+    sbc X1
+    sta DRAW_WIDTH
+
+    lda Y2
+    clc
+    sbc Y1
+    sta DRAW_HEIGHT
+
+    lda X1
+    sta ORIGIN
+    lda Y1
+    ora #$80
+    sta ORIGIN_H
+
     lda DRAW_COLOR
 
     ldx #$00
