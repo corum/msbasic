@@ -86,6 +86,11 @@ VIDMEM_H       = $CB
 WHICH_PIXEL_X1 = $CC
 WHICH_PIXEL_X2 = $CD
 DRAW_WIDTH_IDX = $CE
+TEMP           = $CF
+X1_            = $D0
+X2_            = $D1
+ORIGIN_H_LAST  = $D2
+
 
 SCREEN         = $0400
 
@@ -680,7 +685,7 @@ set_video_bank:
     ; top 3 bits of ORIGIN_H are used to set the VIA2 PortB register pb7, pb6, pb5 - 
     ; these are the banking register. 
     
-    lda ORIGIN_H
+    lda ORIGIN_H   
     and #$E0      ; mask off bottom 5 bits
     sta VIDBANK
 
@@ -692,6 +697,44 @@ set_video_bank:
     lda ORIGIN
     sta VIDMEM
 
+    pla
+    rts
+
+draw_pixel:
+    pha
+    phy
+
+    jsr set_video_bank 
+    lda (VIDMEM)
+    tay
+
+    lda WHICH_PIXEL_X1
+    lsr
+    bcc @left
+
+@right:
+    lda DRAW_COLOR
+    clc
+    asl
+    asl
+    asl
+    asl
+    sta TEMP
+    tya
+    and #$0F    
+    bra @done
+
+@left:
+    lda DRAW_COLOR
+    and #$0F
+    sta TEMP
+    tya
+    and #$F0
+@done:
+    ora TEMP
+    sta (VIDMEM)
+
+    ply
     pla
     rts
 
@@ -769,7 +812,7 @@ draw_rect:
     pla
     rts
 
-
+    
 draw_line:
             ; this algorithm loads XT and YT at X1, Y1 points
             ; ORIGIN and ORIGIN_H also are initialized to X1, Y1 and act as a cursor
@@ -783,15 +826,31 @@ draw_line:
     phy
 
 @start:
+
     ; start drawing from x1,y1
 
-    ldx X1                       
-    stx ORIGIN    ; cursor X    
-    ldy Y1
-    sty ORIGIN_H  ; cursor Y   
+    lda X1_H
+    lsr                 ; if X > 255, shift bit 0 into carry
 
-    lda DRAW_COLOR 
-    sta (ORIGIN)
+    lda X1
+    tay
+    and #$01        
+    sta WHICH_PIXEL_X1  ; which pixel, 0 = left, 1 = right
+    tya
+    ror                 ; divide by 2  and rotate carried bit into bit 7
+    sta ORIGIN          ; ORIGIN contains the indexed X position (X/2)
+    sta X1_
+
+    lda X2_H
+    lsr
+    lda X2
+    ror
+    sta X2_
+
+    lda Y1
+    sta ORIGIN_H
+
+    jsr draw_pixel
 
     ; default increment to +1
     lda #$01 
@@ -799,9 +858,10 @@ draw_line:
     sta YADD
 
     ; calc xdelta
+    
     sec
-    lda X2
-    sbc X1
+    lda X2_
+    sbc X1_
     sta XD  ; xdelta
     sta XT
 
@@ -814,8 +874,8 @@ draw_line:
 
 
     ; if x2 < x1, xadd = -1
-    lda X1
-    cmp X2
+    lda X1_
+    cmp X2_
     bcc @skipxadd
     lda #$FF  
     sta XADD  ; increment by -1
@@ -837,7 +897,13 @@ draw_line:
     sta YD     ; 0 - YD, reverse the y delta
 
 @skipyadd:
-
+    
+    ; divide YD and YT by 2 due to packing of X pixel
+    lda YD
+    lsr
+    sta YD
+    sta YT
+     
     ; start draw loop
 
 @xcheck:
@@ -855,40 +921,55 @@ draw_line:
     bcs @incY
 
 @testend:
-    lda X2
-    cmp ORIGIN
+    lda YD
     bne @xcheck
 
-    lda Y2
-    ora #$80
-    cmp ORIGIN_H
-    bne @xcheck
+    lda XD
+    bne @xcheck  
+
     bra @endloop
 
+
 @incX:
-    clc
+    lda X2_
+    cmp ORIGIN
+    beq @testend
+
+    inc WHICH_PIXEL_X1
+    lda WHICH_PIXEL_X1
+    lsr
+    bcs @pixelskip
+
     lda ORIGIN
+    clc
     adc XADD
     sta ORIGIN
-
+@pixelskip:
     ; plot point (x3,y3)
-    lda DRAW_COLOR
-    sta (ORIGIN)
+    jsr draw_pixel
 
+    cmp X2_
+    bne @ycheck
+
+    lda #$00
+    sta XD
     bra @ycheck
 
 @incY:
-    clc
+
     lda ORIGIN_H
-    and #$7F
+    clc
     adc YADD
-    ora #$80
     sta ORIGIN_H
 
     ; plot point (x3, y3)
-    lda DRAW_COLOR
-    sta (ORIGIN)
+    jsr draw_pixel
 
+    cmp Y2
+    bne @xcheck
+
+    lda #$00
+    sta YD
     bra @xcheck
 
 @endloop:
@@ -1025,6 +1106,186 @@ draw_screen:
     iny
     cpy #$14
     bne @loop
+
+    ply
+    plx
+    pla
+    rts
+
+
+; ============================================================================================
+; graphics tests
+; ============================================================================================
+
+linetests:
+    jsr linetest1
+    jsr cls
+    jsr linetest2
+    jsr cls
+    jsr linetest3
+    rts
+
+linetest1:
+    stz X1
+    stz X1_H
+
+    stz X2_H
+    stz Y1
+
+    ldy #$F0
+    ldx #$01   
+    sty Y2
+@effectx:
+    inc DRAW_COLOR
+    stx X2
+    jsr draw_line
+    inx
+    bne @effectx
+
+    inc X2_H
+@effectx2:
+    inc DRAW_COLOR
+    stx X2
+    jsr draw_line
+    inx
+    cpx #$40
+    bne @effectx2
+@donex:
+    dey
+    dex
+    stx X2
+
+@effecty:
+    inc DRAW_COLOR
+    sty Y2
+    jsr draw_line
+    dey
+    bne @effecty
+    rts
+
+
+linetest2:
+    pha
+    phx
+    phy
+
+
+    ; 0,0 - 255,128
+    lda #$02
+    sta DRAW_COLOR
+
+    stz X1
+    stz X1_H
+    stz Y1        ; Origin is (0,0)
+    
+    lda #$01
+    sta X2_H
+
+    lda #$40
+    sta X2    
+
+    lda #$F0
+    sta Y2        ; Destination (320x240)
+
+    jsr draw_line
+
+    ; 0,128 - 255,0
+    lda #$04
+    sta DRAW_COLOR
+
+    stz X1_H
+    stz X1       ; (0, 240)
+    lda #$F0
+    sta Y1
+
+    lda #$01
+    sta X2_H
+    lda #$40
+    sta X2        ; (320, 0)
+
+    stz Y2
+    jsr draw_line
+
+
+    ; draw backwards
+
+    ; 320,64 - 0,32 
+
+    lda #$01
+    sta X2_H
+
+    lda #$40
+    sta X2    
+
+    lda #$40
+    sta Y2        ; Origin (320x64)
+
+    lda #$02
+    sta DRAW_COLOR
+
+    stz X1
+    stz X1_H
+
+    lda #$20
+    sta Y1        ; Dest is (0,32)
+    
+
+    jsr draw_line
+
+    ply
+    plx
+    pla
+    rts
+
+linetest3:
+    pha
+    phx
+    phy
+
+    lda #$03
+    sta DRAW_COLOR
+
+    stz X1
+    stz X1_H
+    stz X2
+    stz X2_H
+    stz Y2
+    lda #$EF
+    sta Y1
+
+@loop:    
+
+    inc DRAW_COLOR
+    jsr draw_line
+
+@xlow:    
+    clc
+    lda X2
+    adc #$08
+    sta X2
+    bcs @xhigh
+    
+    cmp #$40
+    beq @xcheck
+    bra @y
+
+@xhigh:
+    inc X2_H
+
+@y:
+    sec
+    lda Y1
+    sbc #$06
+    bcc @exit
+    sta Y1    
+    bra @loop
+
+@xcheck:
+    lda X2_H
+    lsr
+    bcc @loop
+
+@exit:
 
     ply
     plx
