@@ -178,8 +178,8 @@ init:
     sta PCR        ; configure CA2 for negative edge independent interrupt
     ;sta PCR2
 
-    ;lda #ACRCFG
-    ;sta ACR        ; enable latching
+    lda #ACRCFG
+    sta ACR        ; enable latching
 
     lda #$83
     sta IER        ; enable interrupts for CA1 and CA2
