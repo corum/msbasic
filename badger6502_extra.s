@@ -189,16 +189,19 @@ init:
     sta PCR        ; configure CA2 for negative edge independent interrupt
     ;sta PCR2
 
-    lda #ACRCFG
-    sta ACR        ; enable latching
+    ;lda #ACRCFG
+    ;sta ACR        ; enable latching
 
     lda #$83
     sta IER        ; enable interrupts for CA1 and CA2
     
+    lda #%11111111 ; Set all pins on port B for output
+    sta DDRB2
+
     ;lda #$80
     ;sta IER2
 
-    jsr cls
+    ;jsr cls
     
     cli
 
