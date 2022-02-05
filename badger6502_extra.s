@@ -1,45 +1,44 @@
 ; memory map
-;0x0000	0x7FFF	RAM (32KB)			
+;0x0000	0x7EFF	RAM			
+;0x7F00	0x7FFF	I/O	16 devices with 16 addresses each		
 ;0x8000	0x9FFF	Video RAM bank (8KB)			
-;0xA000	0xFDFF	ROM (~28K)			
-;0xFE00	0xFEFF	I/O	16 devices with 16 addresses each		
-;0xFF00	0xFFFF	Wozmon and Vectors			
+;0xA000	0xFFFF	ROM		
  
 
 .segment "CODE"
 
 ;ACIA D0
-A_RXD   = $FE00
-A_TXD   = $FE00
-A_STS   = $FE01
-A_RES   = $FE01
-A_CMD   = $FE02
-A_CTL   = $FE03
+A_RXD   = $7F00
+A_TXD   = $7F00
+A_STS   = $7F01
+A_RES   = $7F01
+A_CMD   = $7F02
+A_CTL   = $7F03
 
 ; devices
 ;VIA D1
-PORTB   = $FE20
-PORTA   = $FE2F     ; PORTA is register 1, this is PORTA with no handshake
-DDRB    = $FE22
-DDRA    = $FE23
-SHCTL   = $FE2A
-ACR     = $FE2B     ; auxiliary control register
-PCR     = $FE2C     ; peripheral control register
-IFR     = $FE2D 
-IER     = $FE2E     ; interrupt enable register
+PORTB   = $7F20
+PORTA   = $7F2F     ; PORTA is register 1, this is PORTA with no handshake
+DDRB    = $7F22
+DDRA    = $7F23
+SHCTL   = $7F2A
+ACR     = $7F2B     ; auxiliary control register
+PCR     = $7F2C     ; peripheral control register
+IFR     = $7F2D 
+IER     = $7F2E     ; interrupt enable register
 
 ; devices
 ;VIA2 D2
-PORTB2   = $FE10
-VIDBANK  = $FE10
-PORTA2   = $FE1F     ; PORTA is register 1, this is PORTA with no handshake
-DDRB2    = $FE12
-DDRA2    = $FE13
-SHCTL2   = $FE1A
-ACR2     = $FE1B     ; auxiliary control register
-PCR2     = $FE1C     ; peripheral control register
-IFR2     = $FE1D 
-IER2     = $FE1E     ; interrupt enable register
+PORTB2   = $7F10
+VIDBANK  = $7F10
+PORTA2   = $7F1F     ; PORTA is register 1, this is PORTA with no handshake
+DDRB2    = $7F12
+DDRA2    = $7F13
+SHCTL2   = $7F1A
+ACR2     = $7F1B     ; auxiliary control register
+PCR2     = $7F1C     ; peripheral control register
+IFR2     = $7F1D 
+IER2     = $7F1E     ; interrupt enable register
 
 
 ;VIA config flags 
@@ -201,7 +200,7 @@ init:
     ;lda #$80
     ;sta IER2
 
-    ;jsr cls
+    jsr cls
     
     cli
 
