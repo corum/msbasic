@@ -56,22 +56,31 @@ RW     = %01000000
 RS     = %00100000
 
 ;GRAPHICS
-DRAW_WIDTH     = $2B2
-DRAW_WIDTH_H   = $2B3
-DRAW_HEIGHT    = $2B4
-DRAW_COLOR     = $2B5
-X1             = $2B6
-X1_H           = $2B7
-X2             = $2B8
-X2_H           = $2B9
-Y1             = $2BA
-Y2             = $2BB
-XD             = $2BC   ; xdelta for line drawing
-YD             = $2BD   ; ydelta for line drawing
-XT             = $2BE   ; x temp
-YT             = $2BF   ; y temp
-XADD           = $2C0
-YADD           = $2C1
+
+X1_            = $AD
+X2_            = $AE
+ORIGIN_H_LAST  = $AF
+HIRESPAGE      = $B0
+HIRESPAGE_H    = $B1
+
+DRAW_WIDTH     = $B2
+DRAW_WIDTH_H   = $B3
+DRAW_HEIGHT    = $B4
+DRAW_COLOR     = $B5
+X1             = $B6
+X1_H           = $B7
+X2             = $B8
+X2_H           = $B9
+Y1             = $BA
+Y2             = $BB
+XD             = $BC   ; xdelta for line drawing
+YD             = $BD   ; ydelta for line drawing
+XT             = $BE   ; x temp
+YT             = $BF   ; y temp
+XADD           = $C0
+YADD           = $C1
+WHICH_PIXEL_X1 = $C2
+WHICH_PIXEL_X2 = $C3
 CHAR           = $2C2
 CHAR_H         = $2C3
 CURSOR         = $2C4
@@ -80,34 +89,29 @@ CURSORCOPY     = $2C6
 CURSORCOPY_H   = $2C7
 CURSORPOS_X    = $2C8
 CURSORPOS_Y    = $2C9
-WHICH_PIXEL_X1 = $2CC
-WHICH_PIXEL_X2 = $2CD
 DRAW_WIDTH_IDX = $2CE
-TEMP           = $2CF
-X1_            = $2D0
-X2_            = $2D1
-ORIGIN_H_LAST  = $2D2
-HIRESPAGE      = $2D3
 
-VIDMEM         = $3A
-VIDMEM_H       = $3B
-SOURCE         = $3C
-SOURCE_H       = $3D
-ORIGIN         = $3E 
-ORIGIN_H       = $3F
+VIDMEM         = $C4
+VIDMEM_H       = $C5
+SOURCE         = $C6
+SOURCE_H       = $C7
+ORIGIN         = $C8 
+ORIGIN_H       = $C9
 
 
 ; PS/2 keyboard memory locations
-KBSTATE   = $40
-KBTEMP    = $41
-KBCURR    = $42 
-KBBIT     = $43
-KBEXTEND  = $44
-KBKEYUP   = $45
-KBDBG     = $46
-KBDBG2    = $47
-KEYTEMP   = $48
-KEYLAST   = $49
+KBSTATE   = $CA
+KBTEMP    = $CB
+KBCURR    = $CC 
+KBBIT     = $CD
+KBEXTEND  = $CE
+KBKEYUP   = $CF
+KBDBG     = $D0
+KBDBG2    = $D1
+KEYTEMP   = $D2
+KEYLAST   = $D3
+
+TEMP      = $D4
 
 KBBUF     = $500
 KEYSTATE  = $600
@@ -1014,6 +1018,7 @@ draw_line:
 
 ; helper function to decode apple II hires video data and copy to video memory
 ; to aid in porting
+
 apple_draw_1:
     pha
     phx
@@ -1031,16 +1036,7 @@ apple_draw_1:
     lda hires_lsb, y
     sta SOURCE
 
-    lda HIRESPAGE
-    ror
-    bcc @page2
-
-    lda hires1_msb, y
-    sta SOURCE_H
-    bra @loopx
-
-@page2:
-    lda hires2_msb, y
+    lda (HIRESPAGE), y
     sta SOURCE_H
 
 @loopx:
@@ -1056,7 +1052,8 @@ apple_draw_1:
     bcs @white
 @black:
     ; it's black
-    stz DRAW_COLOR
+    ldy #$80
+    sty DRAW_COLOR
     bra @draw
 @white:
     ldy #$FF
@@ -1093,6 +1090,9 @@ apple_draw_1:
     pla
     rts
 
+;
+;  draw_pixel_2 
+;
 
 draw_pixel_2:
     pha
@@ -1116,18 +1116,20 @@ draw_pixel_2:
 
 set_hires_page1:
     pha
-    lda #$1
+    lda #<hires1_msb
     sta HIRESPAGE
+    lda #>hires1_msb
+    sta HIRESPAGE_H
     pla
-    jsr apple_draw_1
     rts
 
 set_hires_page2:
     pha
-    lda #$2
+    lda #<hires2_msb
     sta HIRESPAGE
+    lda #>hires2_msb
+    sta HIRESPAGE_H
     pla
-    jsr apple_draw_1
     rts
 
 ;draw a character
@@ -1448,6 +1450,8 @@ linetest3:
 ; ============================================================================================
 
 nmi:
+    jsr apple_draw_1
+
     rti
 
 irq:
@@ -1455,8 +1459,6 @@ irq:
     phx
     phy
     
-    jsr apple_draw_1
-
     ; check the ACIA status register to see if we've received data
     ; reading the status register clears the irq bit
     lda A_STS
