@@ -50,10 +50,22 @@ CFGCA  = %00000010  ; configure CA2 for negative active edge for PS/2 clock
 ACRCFG = %00000011  ; enable latching
 
 
-;LCD bits
-E      = %10000000
-RW     = %01000000
-RS     = %00100000
+;ROMDISK
+RD_LOW  = $D030
+RD_HIGH = $D031
+RD_BANK = $D032
+RD_DATA = $D033
+
+;ROMDISK VARIABLES
+
+RD_SOURCE_LOW  = $BC
+RD_SOURCE_HIGH = $BD
+
+RD_BYTES_LOW  = $BE
+RD_BYTES_HIGH = $BF
+
+RD_DEST_LOW   = $C0
+RD_DEST_HIGH  = $C1
 
 ;GRAPHICS
 
@@ -149,21 +161,6 @@ init:
     lda #$1F       ; 1 stop bits, 8 bit word length, internal clock, 19.2k baud rate
     sta A_CTL      ; program the ctl register
 
-; initialize the LCD via the VIA
- ;   lda #%11111111 ; Set all pins on port B for output
- ;   sta DDRB
-
- ;   lda #%00000000 ; Set 3 pins on port A for output
- ;   sta DDRA
-
-;    lda #%00111000 ; set 8-bit mode, 2-line display, 5x8 font
-;    jsr lcd_instruction
-;    lda #%00001110 ; display on cursor on blink off
-;    jsr lcd_instruction
-;    lda #%00000110 ; increment and shift cursor; don't shift entire display
-;    jsr lcd_instruction
-;    lda #%00000001 ; clear the display
-;    jsr lcd_instruction
 
 
 ; init PS/2 kb stuff
@@ -186,15 +183,11 @@ init:
     bne @clrbufx
 
 
-  ;  jsr print_message
-
     lda #%00000000 ; configure all VIA1 A pins for input
     sta DDRA
-    ;sta DDRA2
 
     lda #CFGCA
-    sta PCR        ; configure CA2 for negative edge independent interrupt
-    ;sta PCR2
+    sta PCR        ; configure CA2 for negative edge independent interrupt, for PS/2
 
     ;lda #ACRCFG
     ;sta ACR        ; enable latching
@@ -202,7 +195,7 @@ init:
     lda #$83
     sta IER        ; enable interrupts for CA1 and CA2
     
-    lda #%11111111 ; Set all pins on port B for output
+    lda #%11111111 ; Set all pins on port B for output - video ram bank
     sta DDRB2
 
     ;lda #$80
@@ -217,65 +210,15 @@ init:
     jsr WOZMON
     jmp @loop
 
-message: .asciiz "Badger6502"
-
 
 ; Display startup message
 ShowStartMsg:
 ;    jsr tx_startup_message
      rts
 
-; Wait for a cold/warm start selection
-WaitForKeypress:
-	jsr	MONRDKEY
-	and	#$DF			; Make upper case
-	cmp	#'W'			; compare with [W]arm start
-	beq	WarmStart
-
-	cmp	#'C'			; compare with [C]old start
-	bne	ShowStartMsg
-
-	jmp	COLD_START	; BASIC cold start
-
-WarmStart:
-	jmp	RESTART		; BASIC warm start
-
-StartupMessage:
-	.byte	$0C,"Cold [C] or warm [W] start?",$0D,$0A,$00
 
 Backspace:
   .byte $1B,"[D ",$1B,"[D",$00
-
-ms_basic:
-  .asciiz "Microsoft BASIC"
-
-;LOAD:
-;	RTS
-
-;SAVE:
-;	RTS
-
-;tx_startup_message:
-;    ldx #0
-;@loop:
-;    lda StartupMessage, x
-;    beq @return
-;    inx
-;    jsr MONCOUT
-;    jmp @loop
-;@return:
-;    rts
-
-;tx_message:
-;    ldx #0
-;@loop:
-;    lda message, x
-;    beq @exit
-;    inx
-;    jsr MONCOUT
-;    jmp @loop
-;@exit:
-;    rts
 
 wdc_pause:
     phx
@@ -329,73 +272,6 @@ rx_char_sync_nowait:
 @exit:
     rts
 
-
-;lcd_wait:
-;    pha
-;    lda #%00000000  ; PortB is input
-;    sta DDRB
-
-;lcd_wait_loop:
-;    lda #RW
-;    sta PORTA
-
-;    lda #(RW|E)
-;    sta PORTA
-
-;    lda PORTB
-;    and #%10000000
-;    bne lcd_wait_loop
-
-;    lda #RW
-;    sta PORTA
-
-;    beq lcd_wait_loop
-
-;    lda #%11111111  ; PortB is output
-;    sta DDRB
-;    pla
-;    rts
-
-;lcd_instruction:
-;    jsr lcd_wait
-;    sta PORTB
-
-;    lda #0         ; clear RS/RW/E bits
-;    sta PORTA
-
-;    lda #E         ; flip enable bit on port a to send command via portb
-;    sta PORTA
-
-;    lda #0         ; clear RS/RW/E bits
-;    sta PORTA
-;    rts
-
-;print_message:
-;    ldx #0
-;@loop:
-;    lda message, x
-;    beq @return
-;    inx
-    
-;    jsr print_char
-
-    ;jsr tx_char
-;    jmp @loop
-;@return:
-;    rts
-
-;print_char:
-;    jsr lcd_wait
-;    sta PORTB
-;    pha
-;    lda #RS        ; register select bit on
-;    sta PORTA
-;    lda #(RS | E)  ; toggle E bit while leaving RS bit on
-;    sta PORTA
-;    lda #RS        ; clear enable bit
-;    sta PORTA
-;    pla
-;    rts
 
 tx_backspace:
     pha
@@ -478,199 +354,6 @@ display_char:
 
 wozlong:
     jmp $FF00
-
-
-
-
-;==========================================================================
-; console routines
-;==========================================================================
-
-calc_cursor:  
-    pha
-    phx
-
-	clc
-    lda CURSOR
-    ldx CURSORPOS_Y   
-
-@loopmult:
-    adc #$40
-    bcs @inchigh
-@resumeloop:
-	dex
-	bne @loopmult
-    bra @addy
-
-@inchigh:
-    clc 
-    inc CURSOR_H
-    bra @resumeloop
-
-@addy:
-    clc
-    adc CURSORPOS_X
-    sta CURSOR
-    bcc @exit
-    inc CURSOR_H
-
-@exit:
-    plx
-    pla
-    rts
-
-; based on CURSORPOS_X and CURSORPOS_Y, set drawing point for character
-set_cursor_coords:
-    pha
-    phx
-
-    lda #$00
-    sta X1
-    sta Y1
-
-    ldx #$00
-    lda #$00
-@loopx:
-    cpx CURSORPOS_X
-    beq @setx
-    inx
-    clc
-    adc #$04
-    bra @loopx
-
-@setx:
-    sta X1
-    ldx #$00
-    lda #$00
-
-@loopy:
-    cpx CURSORPOS_Y
-    beq @sety
-    inx
-    clc
-    adc #$06
-    bra @loopy
-
-@sety:
-    sta Y1
-
-    plx
-    pla
-    rts
-
-; Add a character to the screen memory at the cursor location and render on the screen
-;char_to_screen:
-;    pha
-;    phx
-
-;    ldx #$02
-;    stx DRAW_COLOR
-
-;    jsr calc_cursor
-    
-
-;    cmp #$0D  ; CR
-;    beq @cr
-;    cmp #$0A  ; linefeed
-;    beq @afternewrow
-;    cmp #$08  ; backspace
-;    beq @backspace
-;    cmp #$03  ; ESCAPE
-;    beq @escape
-
-    ; write to screen memory
-    ; screen + (cursorpos_y * $40 + cursorpos_x)
-;    sta (CURSOR)
-
- ;   jsr set_cursor_coords  
-;    jsr draw_char
-
-    
- ;   adc CURSORPOS_X
-
- ;   inc CURSORPOS_X
- ;   lda CURSORPOS_X
- ;   cmp #$40
- ;   bne @afternewrow
-
-;@cr:
-;    stz CURSORPOS_X
-;    inc CURSORPOS_Y
-;    lda CURSORPOS_Y
-;    cmp #$14
-;    bne @afternewrow
-    ; we need to scroll now
-;    jsr scroll_screen
-;    jsr draw_screen
-;    bra @afternewrow
-
-;@backspace:
-;    dec CURSORPOS_X
-;    cmp #$FF
-;    bne @doback
-;    stz CURSORPOS_X
-;    bra @afternewrow
-
-;@doback:
-;   lda #$00
-;   dec CURSOR
-;   sta (CURSOR)
-;   bra @afternewrow
-
-;@escape:
-;    jsr cls
-
-;@afternewrow:
-;    plx
-;    pla
-;    rts
-
-;scroll_screen:
-;    pha
-;    phx
-;    phy 
-
-    ; set cursor to beginning of screen memory
-;    lda #<SCREEN
-;    sta CURSOR
-  
-;    clc
-;    adc #$40
-;    sta CURSORCOPY
-
-;    lda #>SCREEN
-;    sta CURSOR_H
-;    sta CURSORCOPY_H
- 
-    ; copy 
-;    lda #$00
-;    ldx #$00
-;@loop:
-;    lda (CURSORCOPY),Y
-;    sta (CURSOR),Y
-;    iny
-;    bne @loop
-
-;    inc CURSOR_H
-;    inc CURSORCOPY_H
-
-;    inx
-;    cpx #$04
-;    bne @loop
-
-;    stz CURSORPOS_X
-;    lda #$13
-;    sta CURSORPOS_Y
-
-;    lda #<SCREEN
-;    sta CURSOR
-;    lda #>SCREEN
-;    sta CURSOR_H
-
-;    ply
-;    plx
-;    pla
-;    rts
 
 ;==========================================================================
 ; drawing routines
@@ -1132,138 +815,6 @@ set_hires_page2:
     pla
     rts
 
-;draw a character
-;draw_char:
-;    pha
-;    phx
-;    phy
-
-;    tay
-;    iny
-
-;    ldx #<font
-;    stx CHAR
-;    ldx #>font 
-;    stx CHAR_H
-
-;    clc
-
-;   get char data
-;    lda CHAR
-;@getchar:
-;    dey
-;    beq @havechar
-;    adc #$06
-;    bcc @skiphighinc
-;    inc CHAR_H
-;    sta CHAR
-;    lda CHAR
-;    clc
-
-;@skiphighinc:
-;    bra @getchar
-
-;@havechar:
-;    adc #$06
-;    sta CHAR
-
-;    lda X1
-;    sta ORIGIN
-;    lda Y1
-;    clc
-;    ora #$80
-;    sta ORIGIN_H
-
-;    ldx #$00
-;@looprow:
-;    ldy #$00
-;    lda (CHAR)
-;@loopcol:
-
-;    pha
-;    lda #$00
-;	sta (ORIGIN),Y
-;    pla
-
-;    asl
-;    bcc @afterpixel
-
-;    pha
-;    lda DRAW_COLOR
-;	sta (ORIGIN),Y
-;    pla
-
-;@afterpixel:
-;    iny
-;	cpy #$04
-;	bne @loopcol
-
-;    inc ORIGIN_H
-;    inx
-;    dec CHAR
-;	cpx #$06
-;	bne @looprow
-
-;@exit:
-;    ply
-;    plx
-;    pla
-;    rts
-
-
-; screen is 32x21
-; from $400 to $C00
-;draw_screen:
-;    pha
-;    phx
-;    phy
-
-    
-;    ldx #<SCREEN
-;    stx CURSOR
-;    ldx #>SCREEN
-;    stx CURSOR_H
-
-;    stx X1
-;    stx Y1
-    
-;    ldy #$00
-;    ldx #$00
-
-;@loop:
-    
-;    lda (CURSOR)
-;    jsr draw_char
-
-;    lda X1
-;    clc
-;    adc #$04
-;    sta X1
-
-;    inc CURSOR
-;    bne @skiphigh
-;    inc CURSOR_H
-;@skiphigh:
-
-;    inx
-;    cpx #$40
-;    bne @loop
-
-;    ldx #$00
-;    stx X1
-;    lda Y1
-;    clc
-;    adc #$06
-;    sta Y1
-;    iny
-;    cpy #$14
-;    bne @loop
-
-;    ply
-;    plx
-;    pla
-;    rts
-
 
 ; ============================================================================================
 ; graphics tests
@@ -1441,6 +992,78 @@ linetest3:
 
     ply
     plx
+    pla
+    rts
+
+
+; ============================================================================================
+; ROMDISK routines
+; ============================================================================================
+;ROMDISK VARIABLES
+;RD_BYTES_LOW  = $BE
+;RD_BYTES_HIGH = $BF
+;RD_DEST_LOW   = $C0
+;RD_DEST_HIGH  = $C1
+;RD_SOURCE_LOW  = $BC
+;RD_SOURCE_HIGH = $BD
+;RD_LOW  = $D030
+;RD_HIGH = $D031
+;RD_BANK = $D032
+;RD_DATA = $D033
+
+romdisk_load:
+
+    ; RD_BYTES_LOW / RD_BYTES_HIGH - are the number of bytes to read from the ROM disk
+    ; RD_SOURCE_LOW / RD_SOURCE_HIGH - are the high and low starting address in ROM disk
+    ; RD_DEST_LOW / RD_DEST_HIGH - are the starting destination address point for the copied data
+    ; ramdisk copy will set RAMDISK address based on RD_SOURCE and start copying to RD_DEST from whatever RD_BANK is set
+
+    pha
+
+
+
+@loop:
+    ldx RD_BYTES_LOW
+    cpx #$00
+    beq @decrement_high
+    bra @copy
+
+@decrement_high:
+    ldx RD_BYTES_HIGH
+    cpx #$00
+    beq @done
+    dec RD_BYTES_HIGH
+
+@copy:
+    dec RD_BYTES_LOW
+
+    ; load ramdisk with source address and read, and then copy to dest address - increment both addresses
+    lda RD_SOURCE_LOW
+    sta RD_LOW
+    lda RD_SOURCE_HIGH
+    sta RD_HIGH
+    
+    lda RD_DATA        ;  data from romdisk
+    sta (RD_DEST_LOW)  ; write to destination address in RAM
+
+    ; increment both source and dest addresses
+
+    inc RD_SOURCE_LOW
+    bne @increment_dest
+    inc RD_SOURCE_HIGH    
+
+@increment_dest:   
+    inc RD_DEST_LOW
+    bne @loop
+    inc RD_DEST_HIGH
+    bra @loop
+
+@done:
+    ldy RD_BYTES_HIGH
+
+     
+    cpx #$00
+    
     pla
     rts
 
