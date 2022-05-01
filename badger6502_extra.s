@@ -220,19 +220,37 @@ ShowStartMsg:
 Backspace:
   .byte $1B,"[D ",$1B,"[D",$00
 
+shortpause:
+    phx
+    ldx #0
+
+@pause_loop:
+    inx
+    cpx #$10
+    bne @pause_loop
+
+    plx
+    rts
+
+
+pause:
+    phx
+    ldx #0
+
+@pause_loop:
+    inx
+    cpx #$00
+    bne @pause_loop
+
+    plx
+    rts
+
 wdc_pause:
     phx
     ldx #0
 
-@wdc_pause_loop1:
-    inx
-    cpx #$00
-    bne @wdc_pause_loop1
-
-@wdc_pause_loop2:
-    inx
-    cpx #$00
-    bne @wdc_pause_loop2
+    jsr pause
+    jsr pause
 
     plx
     rts
@@ -1040,11 +1058,15 @@ romdisk_load:
     ; load ramdisk with source address and read, and then copy to dest address - increment both addresses
     lda RD_SOURCE_LOW
     sta RD_LOW
+    ;jsr shortpause
+
     lda RD_SOURCE_HIGH
     sta RD_HIGH
-    
+    ;jsr shortpause
+
     lda RD_DATA        ;  data from romdisk
     sta (RD_DEST_LOW)  ; write to destination address in RAM
+    ;jsr shortpause
 
     ; increment both source and dest addresses
 
