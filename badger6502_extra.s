@@ -1,46 +1,33 @@
 ;memory map
-;0x0000	0x7FFF	RAM				32KB main RAM
-;0x8000	0xBFFF	Banked RAM		16KB banked RAM
-;0xC000	0xCFFF	Video RAM		4KB banked video memory
-;0xD000	0xD0FF	Devices
-;0xD100	0xF2FF	Basic ROM
-;0xF300	0xFFFF	OS
+
+;0x0000 0xCFFF RAM 52KB
+;0xC000 0xC0FF Devices 
+;0xC100 0xE2FF Basic ROM
+;0xE300 0xFFFF OS
+
  
 
 .segment "CODE"
 
-;ACIA D0
-A_RXD   = $D000
-A_TXD   = $D000
-A_STS   = $D001
-A_RES   = $D001
-A_CMD   = $D002
-A_CTL   = $D003
+;ACIA C0
+A_RXD   = $C000
+A_TXD   = $C000
+A_STS   = $C001
+A_RES   = $C001
+A_CMD   = $C002
+A_CTL   = $C003
 
 ; devices
 ;VIA D1
-PORTB   = $D020
-PORTA   = $D02F     ; PORTA is register 1, this is PORTA with no handshake
-DDRB    = $D022
-DDRA    = $D023
-SHCTL   = $D02A
-ACR     = $D02B     ; auxiliary control register
-PCR     = $D02C     ; peripheral control register
-IFR     = $D02D 
-IER     = $D02E     ; interrupt enable register
-
-; devices
-;VIA2 D2
-PORTB2   = $D010
-VIDBANK  = $D010
-PORTA2   = $D01F     ; PORTA is register 1, this is PORTA with no handshake
-DDRB2    = $D012
-DDRA2    = $D013
-SHCTL2   = $D01A
-ACR2     = $D01B     ; auxiliary control register
-PCR2     = $D01C     ; peripheral control register
-IFR2     = $D01D 
-IER2     = $D01E     ; interrupt enable register
+PORTB   = $C010
+PORTA   = $C01F     ; PORTA is register 1, this is PORTA with no handshake
+DDRB    = $C012
+DDRA    = $C013
+SHCTL   = $C01A
+ACR     = $C01B     ; auxiliary control register
+PCR     = $C01C     ; peripheral control register
+IFR     = $C01D 
+IER     = $C01E     ; interrupt enable register
 
 
 ;VIA config flags 
@@ -50,31 +37,20 @@ CFGCA  = %00000010  ; configure CA2 for negative active edge for PS/2 clock
 ACRCFG = %00000011  ; enable latching
 
 
-;ROMDISK
-RD_LOW  = $D030
-RD_HIGH = $D031
-RD_BANK = $D032
-RD_DATA = $D033
-
-;ROMDISK VARIABLES
-
-RD_SOURCE_LOW  = $BC
-RD_SOURCE_HIGH = $BD
-
-RD_BYTES_LOW  = $BE
-RD_BYTES_HIGH = $BF
-
-RD_DEST_LOW   = $C0
-RD_DEST_HIGH  = $C1
-
 ;GRAPHICS
+YADD           = $A7
+XADD           = $A8
+X1_            = $A9
+Y1_            = $AA
+X2_            = $AB
+ORIGIN_L       = $AC
+ORIGIN_H       = $AD
 
-X1_            = $AD
-X2_            = $AE
-ORIGIN_H_LAST  = $AF
+SCREEN_L       = $AE
+SCREEN_H       = $AF
+
 HIRESPAGE      = $B0
 HIRESPAGE_H    = $B1
-
 DRAW_WIDTH     = $B2
 DRAW_WIDTH_H   = $B3
 DRAW_HEIGHT    = $B4
@@ -89,26 +65,25 @@ XD             = $BC   ; xdelta for line drawing
 YD             = $BD   ; ydelta for line drawing
 XT             = $BE   ; x temp
 YT             = $BF   ; y temp
-XADD           = $C0
-YADD           = $C1
-WHICH_PIXEL_X1 = $C2
-WHICH_PIXEL_X2 = $C3
-CHAR           = $2C2
-CHAR_H         = $2C3
-CURSOR         = $2C4
-CURSOR_H       = $2C5
-CURSORCOPY     = $2C6
-CURSORCOPY_H   = $2C7
-CURSORPOS_X    = $2C8
-CURSORPOS_Y    = $2C9
-DRAW_WIDTH_IDX = $2CE
 
-VIDMEM         = $C4
-VIDMEM_H       = $C5
-SOURCE         = $C6
-SOURCE_H       = $C7
-ORIGIN         = $C8 
-ORIGIN_H       = $C9
+;ROMDISK
+RD_LOW  = $C030
+RD_HIGH = $C031
+RD_BANK = $C032
+RD_DATA = $C033
+
+;ROMDISK VARIABLES
+
+RD_SOURCE_LOW  = $BC
+RD_SOURCE_HIGH = $BD
+
+RD_BYTES_LOW  = $BE
+RD_BYTES_HIGH = $BF
+
+RD_DEST_LOW   = $C0
+RD_DEST_HIGH  = $C1
+
+
 
 
 ; PS/2 keyboard memory locations
@@ -142,6 +117,8 @@ PS2_STOP    = $03
 init:
     sei
     cld
+    
+    sta $D03E ; set graphics mode 1
 
     ldx #STACK_TOP
     txs
@@ -195,13 +172,14 @@ init:
     lda #$83
     sta IER        ; enable interrupts for CA1 and CA2
     
-    lda #%11111111 ; Set all pins on port B for output - video ram bank
-    sta DDRB2
+    ; set graphics page
+    lda #$20
+    sta SCREEN_H
+    lda #$00
+    sta SCREEN_L
+    jsr set_hires_page1
 
-    ;lda #$80
-    ;sta IER2
-
-    jsr cls
+    ;jsr cls
     
     cli
 
@@ -252,54 +230,54 @@ tx_char_sync:
 
     rts
 
-rx_char_sync:
-    lda A_STS              ; get status byte
-    and #$08               ; max rx buffer status flag
-    beq rx_char_sync       ; loop if rx buffer is empty   
-    lda A_RXD              ; get byte from ACIA
-    rts
+;rx_char_sync:
+;    lda A_STS              ; get status byte
+;    and #$08               ; max rx buffer status flag
+;    beq rx_char_sync       ; loop if rx buffer is empty   
+;    lda A_RXD              ; get byte from ACIA
+;    rts
 
-rx_char_sync_nowait:
-    lda A_STS              ; get status byte
-    and #$08               ; max rx buffer status flag
-    beq @nochar            ; exit with a null if the buffer is empty  
-    lda A_RXD              ; get byte from ACIA
-    bra @exit
-@nochar:
-    lda #$00
-    bra @exit
+;rx_char_sync_nowait:
+;    lda A_STS              ; get status byte
+;    and #$08               ; max rx buffer status flag
+;    beq @nochar            ; exit with a null if the buffer is empty  
+;    lda A_RXD              ; get byte from ACIA
+;    bra @exit
+;@nochar:
+;    lda #$00
+;    bra @exit
 
-@exit:
-    rts
+;@exit:
+;    rts
 
 
-tx_backspace:
-    pha
-    phx
-    ldx #$FF
-@loop:
-    inx
-    lda Backspace,X
-    beq @exit
-    jsr MONCOUT
-    bne @loop
-@exit:
-    plx
-    pla
-    rts
+;tx_backspace:
+;    pha
+;    phx
+;    ldx #$FF
+;@loop:
+;    inx
+;    lda Backspace,X
+;    beq @exit
+;    jsr MONCOUT
+;    bne @loop
+;@exit:
+;    plx
+;    pla
+;    rts
 
 ;==========================================================================
 ; Keyboard
 ;==========================================================================
 
-read_char_async_apple:
-    lda KBCURR
-    cmp #$00
-    beq @exit
-    jsr read_char
-    ora #$80
-@exit:
-    rts
+;read_char_async_apple:
+;    lda KBCURR
+;    cmp #$00
+;    beq @exit
+;    jsr read_char
+;    ora #$80
+;@exit:
+;    rts
 
 read_char_async:
     lda KBCURR
@@ -361,146 +339,65 @@ wozlong:
 
 cls:
 _cls:
-     
     pha
 
     lda #$00
     sta DRAW_COLOR
     
+    jsr fillscreen
+
+    pla
+    rts
+
+fillscreen:    
+    pha
+
+    lda #$00
     sta X1
-    sta X1_H
     sta Y1
 
-    ; $140 = 320
-    lda #$1
-    sta X2_H
-
-    lda #$40
-    sta X2
+    lda #$28
+    sta X2    
     
-    
-    lda #$F0  ; 240
+    lda #$C8  ; 200
     sta Y2
     
-    jsr draw_rect
+    jsr draw_char_rect
 
-    pla
-    rts
-
-set_vid_bank:
-    pha
-
-; set video bank
-    lda ORIGIN_H   
-    and #$F0      ; mask off bottom 4 bits
-    sta VIDBANK
-
-    lda ORIGIN_H
-    and #$0F      ; mask off top 4 bits
-    ora #$C0      ; video memory is banked in from $C000 - $CFFF
-    sta VIDMEM_H
-
-    lda ORIGIN
-    sta VIDMEM
-; end of setting video bank
-    pla
-    rts
-
-draw_pixel:
-    pha
-    phy
-
-; set video bank
-    lda ORIGIN_H   
-    and #$F0      ; mask off bottom 4 bits
-    sta VIDBANK
-
-    lda ORIGIN_H
-    and #$0F      ; mask off top 4 bits
-    ora #$C0      ; video memory is banked in from $C000 - $CFFF
-    sta VIDMEM_H
-
-    lda ORIGIN
-    sta VIDMEM
-; end of setting video bank
-
-    lda (VIDMEM)
-    tay
-
-    lda WHICH_PIXEL_X1
-    lsr
-    bcc @left
-
-@right:
-    lda DRAW_COLOR
-    clc
-    asl
-    asl
-    asl
-    asl
-    sta TEMP
-    tya
-    and #$0F    
-    bra @write
-
-@left:
-    lda DRAW_COLOR
-    and #$0F
-    sta TEMP
-    tya
-    and #$F0
-
-@write:
-    ora TEMP
-    sta (VIDMEM)
-
-    ply
     pla
     rts
 
 ;draw a rectangle
-draw_rect:
+draw_char_rect:
     pha
     phx
     phy
+
+; calculate the starting address in video memory
+    ldy Y1
+    lda eb_hires_lsb, y
+    sta ORIGIN_L
+
+    lda (HIRESPAGE),Y
+    sta ORIGIN_H
+
+    lda X1
+    clc
+    adc ORIGIN_L
+    bcc @nocarry
+    inc ORIGIN_H
+@nocarry:
+    sta ORIGIN_L
 
     lda X2
     sec
     sbc X1
     sta DRAW_WIDTH
-
-    lda X2_H
-    sec
-    sbc X1_H
-    sta DRAW_WIDTH_H
-    lsr                  ; if > 255, shift bit 0 into carry
     
-    lda DRAW_WIDTH
-    ror                  ; divide by 2 and rotate carry into bit 7
-                         
-    sta DRAW_WIDTH       ; DRAW_WIDTH is now indexed width
-
     lda Y2
     sec
     sbc Y1
     sta DRAW_HEIGHT
-
-
-    lda X1_H
-    lsr                 ; if X > 255, shift bit 0 into carry
-
-    lda X1
-    and #$01        
-    sta WHICH_PIXEL_X1  ; which pixel, 0 = left, 1 = right
-   
-    lda X1
-    ror                 ; divide by 2  and rotate carried bit into bit 7
-
-    sta ORIGIN          ; ORIGIN contains the indexed X position
-
-    lda Y1
-    sta ORIGIN_H
-    jsr set_vid_bank
 
     lda DRAW_COLOR
     
@@ -508,23 +405,76 @@ draw_rect:
 @dr_looprow:
     ldy #$00
 @dr_loopcol:
-
-    ; pixels are 4bpp, so we should read the pixel we're planning to write
-    ; mask out the pixel we're going to change, or it back in, and then store both pixels
-    ; for now, ignore which pixel and just fill them both,  will only draw rects on 2 pixel boundary
-    ; but it'll be faster
-
-    sta (VIDMEM),Y
+    sta (ORIGIN_L),Y
     iny
 	cpy DRAW_WIDTH
 	bne @dr_loopcol
 
-    inc ORIGIN_H   
-    jsr set_vid_bank
-
+    ; add 40 to ORIGIN_L
+    ; if overflow, increment origin_H
+    lda #$28 ; 40
+    clc
+    adc ORIGIN_L
+    bcc @after_carry
+    inc ORIGIN_H
+@after_carry:
+    sta ORIGIN_L
+    lda DRAW_COLOR
     inx
 	cpx DRAW_HEIGHT
 	bne @dr_looprow
+
+    ply
+    plx
+    pla
+    rts
+
+
+draw_pixel:
+    pha
+    phx
+    phy
+
+    ldy Y1
+    lda eb_hires_lsb, y
+    sta ORIGIN_L
+
+    lda (HIRESPAGE),Y
+    sta ORIGIN_H
+
+    clc
+    lda X1_H
+    lsr        ; if > 255 shift into carry
+    lda X1
+; divide by 8, but ror first bring in the carry flag
+    ror
+    lsr
+    lsr 
+; A now contains the X character betweeen 0-40
+
+    clc
+    adc ORIGIN_L
+    bcc @after_carry
+    inc ORIGIN_H
+@after_carry:
+    sta ORIGIN_L
+; now at the byte of video memory that contains the pixel we want to flip
+
+    lda X1
+    and #$7   ; last 3 bits indicate which bit we want to display
+    tax
+    inx
+
+    lda #0
+    sec
+
+@shiftloop:   
+    rol       
+    dex
+    bne @shiftloop
+
+    ora (ORIGIN_L)
+    sta (ORIGIN_L)
 
     ply
     plx
@@ -544,33 +494,35 @@ draw_line:
     phx
     phy
 
+    
 @start:
 
-    ; start drawing from x1,y1
+    ; cache the start and end positions
 
+    ; for convenience, let's deal with 8 bits
     lda X1_H
+    pha                 ; store x1_h on the stack to restore at end of function
+    and #$1
+    sta X1_H            ; clamp max high value to 1
     lsr                 ; if X > 255, shift bit 0 into carry
 
     lda X1
-    tay
-    and #$01        
-    sta WHICH_PIXEL_X1  ; which pixel, 0 = left, 1 = right
-    tya
+    pha                 ; store x1 on the stack to restore at end of function
     ror                 ; divide by 2  and rotate carried bit into bit 7
-    sta ORIGIN          ; ORIGIN contains the indexed X position (X/2)
     sta X1_
-
+    
+    ; do same for X2
     lda X2_H
+    and #$1
+    sta X2_H            ; clamp max high val to 1
     lsr
     lda X2
     ror
     sta X2_
 
+    ; stash Y1
     lda Y1
-    sta ORIGIN_H
-
-    
-    jsr draw_pixel
+    pha
 
     ; default increment to +1
     lda #$01 
@@ -578,20 +530,18 @@ draw_line:
     sta YADD
 
     ; calc xdelta
-    
     sec
     lda X2_
     sbc X1_
     sta XD  ; xdelta
-    sta XT
+    sta XT  ; xtemp
 
     ; calc ydelta
     sec
     lda Y2
     sbc Y1
     sta YD  ; ydelta
-    sta YT
-
+    sta YT  ; temp
 
     ; if x2 < x1, xadd = -1
     lda X1_
@@ -617,28 +567,31 @@ draw_line:
     sta YD     ; 0 - YD, reverse the y delta
 
 @skipyadd:
-    
-    ; divide YD and YT by 2 due to packing of X pixel
+   ; divide YD and YT by 2 due to packing of X pixel
     lda YD
     lsr
     sta YD
     sta YT
      
+
+
     ; start draw loop
+    ; start drawing from x1,y1
+    jsr draw_pixel
 
 @xcheck:
     clc    
     lda XT
     adc XD 
     sta XT
-    bcs @incX
+    bcs @incX  ; if it carries on the xcheck, increment x
 
 @ycheck:  
     clc     
     lda YT
     adc YD
     sta YT
-    bcs @incY
+    bcs @incY  ; carry on the ycheck means increment y
 
 @testend:
     lda YD
@@ -650,37 +603,59 @@ draw_line:
     bra @endloop
 
 
+
 @incX:
-    lda X2_
-    cmp ORIGIN
+; if X and X dest are equal, 
+    lda X2_H
+    cmp X1_H
+    bne @incxsign 
+    lda X2
+    cmp X1
     beq @testend
 
-    inc WHICH_PIXEL_X1
-    lda WHICH_PIXEL_X1
-    lsr
-    bcs @pixelskip
 
-    lda ORIGIN
+@incxsign:
+    lda X1
     clc
     adc XADD
-    sta ORIGIN
+    sta X1          ; update X1 with the +1 or -1
+
+    lda XADD
+    bmi @subx       ; was it subtraction?
+
+    lda X1  
+    bne @pixelskip  ; was addition, if result is 0, it means we rolled over
+    inc X1_H
+    bra @pixelskip
+
+@subx:    
+    lda X1          ; if it was subtraciton and X1 == #$FF, we rolled back
+    cmp #$FF
+    bne @pixelskip
+    dec X1_H
+
 @pixelskip:
     ; plot point (x3,y3)
     jsr draw_pixel
 
-    cmp X2_
+    ; have we completed X?
+    lda X2_H
+    cmp X1_H
+    bne @ycheck
+    lda X1
+    cmp X2
     bne @ycheck
 
-    lda #$00
+    lda #$00   ; we've hit X, null out XD
     sta XD
-    bra @ycheck
+    bra @ycheck    
 
 @incY:
 
-    lda ORIGIN_H
+    lda Y1
     clc
     adc YADD
-    sta ORIGIN_H
+    sta Y1
 
     ; plot point (x3, y3)
     jsr draw_pixel
@@ -688,133 +663,23 @@ draw_line:
     cmp Y2
     bne @xcheck
 
-    lda #$00
+    lda #$00    ; we've hit Y
     sta YD
     bra @xcheck
 
 @endloop:
 
-    ply
-    plx
-    pla
-    rts
-
-; helper function to decode apple II hires video data and copy to video memory
-; to aid in porting
-
-apple_draw_1:
-    pha
-    phx
-    phy
-    
-    lda #$00
+    pla      ; restore Y1, X1, X1_H
     sta Y1
-
-    ldy #$00
-@loopy:
-    ldx #$00
-    stx X1
-    stx X1_H
-
-    lda hires_lsb, y
-    sta SOURCE
-
-    lda (HIRESPAGE), y
-    sta SOURCE_H
-
-@loopx:
-
-    lda (SOURCE)
-
-    phx
-    phy
-
-    ldx #$7
-@nextpixel:   
-    ror
-    bcs @white
-@black:
-    ; it's black
-    ldy #$80
-    sty DRAW_COLOR
-    bra @draw
-@white:
-    ldy #$FF
-    sty DRAW_COLOR
-@draw:
-    inc X1
-    bne @skipcarry
-    inc X1_H
-
-@skipcarry:    
-    jsr draw_pixel_2
-
-    dex
-    bne @nextpixel
-
-    ply
-    plx
-  
-@next:
-    inc SOURCE
-    inx
-    cpx #$28
-    bne @loopx
-
-    iny
-    sty Y1
-    sty ORIGIN_H
-
-    cpy #$C0
-    bne @loopy
+    pla
+    sta X1
+    pla
+    sta X1_H
 
     ply
     plx
     pla
     rts
-
-;
-;  draw_pixel_2 
-;
-
-draw_pixel_2:
-    pha
-    phy
-
-    lda X1_H
-    lsr                 ; if X > 255, shift bit 0 into carry
-    lda X1
-    tay
-    and #$01        
-    sta WHICH_PIXEL_X1  ; which pixel, 0 = left, 1 = right
-    tya
-    ror                 ; divide by 2  and rotate carried bit into bit 7
-    sta ORIGIN          ; ORIGIN contains the indexed X position (X/2)
-
-    jsr draw_pixel
-
-    ply
-    pla
-    rts
-
-set_hires_page1:
-    pha
-    lda #<hires1_msb
-    sta HIRESPAGE
-    lda #>hires1_msb
-    sta HIRESPAGE_H
-    pla
-    rts
-
-set_hires_page2:
-    pha
-    lda #<hires2_msb
-    sta HIRESPAGE
-    lda #>hires2_msb
-    sta HIRESPAGE_H
-    pla
-    rts
-
 
 ; ============================================================================================
 ; graphics tests
@@ -835,11 +700,11 @@ linetest1:
     stz X2_H
     stz Y1
 
-    ldy #$F0
+    ldy #$C7
     ldx #$01   
     sty Y2
 @effectx:
-    inc DRAW_COLOR
+    ;inc DRAW_COLOR
     stx X2
     jsr draw_line
     inx
@@ -847,11 +712,11 @@ linetest1:
 
     inc X2_H
 @effectx2:
-    inc DRAW_COLOR
+    ;inc DRAW_COLOR
     stx X2
     jsr draw_line
     inx
-    cpx #$40
+    cpx #$3F
     bne @effectx2
 @donex:
     dey
@@ -859,7 +724,7 @@ linetest1:
     stx X2
 
 @effecty:
-    inc DRAW_COLOR
+    ;inc DRAW_COLOR
     sty Y2
     jsr draw_line
     dey
@@ -884,11 +749,11 @@ linetest2:
     lda #$01
     sta X2_H
 
-    lda #$40
+    lda #$3F
     sta X2    
 
-    lda #$F0
-    sta Y2        ; Destination (320x240)
+    lda #$C7
+    sta Y2        ; Destination (320x200)
 
     jsr draw_line
 
@@ -897,13 +762,13 @@ linetest2:
     sta DRAW_COLOR
 
     stz X1_H
-    stz X1       ; (0, 240)
-    lda #$F0
+    stz X1       ; (0, 200)
+    lda #$C7
     sta Y1
 
     lda #$01
     sta X2_H
-    lda #$40
+    lda #$3F
     sta X2        ; (320, 0)
 
     stz Y2
@@ -917,14 +782,14 @@ linetest2:
     lda #$01
     sta X2_H
 
-    lda #$40
+    lda #$3F
     sta X2    
 
     lda #$40
     sta Y2        ; Origin (320x64)
 
-    lda #$02
-    sta DRAW_COLOR
+    ;lda #$02
+    ;sta DRAW_COLOR
 
     stz X1
     stz X1_H
@@ -945,15 +810,15 @@ linetest3:
     phx
     phy
 
-    lda #$03
-    sta DRAW_COLOR
+    ;lda #$03
+    ;sta DRAW_COLOR
 
     stz X1
     stz X1_H
     stz X2
     stz X2_H
     stz Y2
-    lda #$EF
+    lda #$C7
     sta Y1
 
 @loop:    
@@ -968,7 +833,7 @@ linetest3:
     sta X2
     bcs @xhigh
     
-    cmp #$40
+    cmp #$3F
     beq @xcheck
     bra @y
 
@@ -995,6 +860,23 @@ linetest3:
     pla
     rts
 
+set_hires_page1:
+    pha
+    lda #<eb_hires1_msb
+    sta HIRESPAGE
+    lda #>eb_hires1_msb
+    sta HIRESPAGE_H
+    pla
+    rts
+
+set_hires_page2:
+    pha
+    lda #<eb_hires2_msb
+    sta HIRESPAGE
+    lda #>eb_hires2_msb
+    sta HIRESPAGE_H
+    pla
+    rts
 
 ; ============================================================================================
 ; ROMDISK routines
@@ -1073,8 +955,6 @@ romdisk_load:
 ; ============================================================================================
 
 nmi:
-    jsr apple_draw_1
-
     rti
 
 irq:
@@ -1307,86 +1187,423 @@ ps2_ascii_control:
   .byte $00, $00, $00, $00, $00, $00, $03, $00, $00, $00, $00, $00, $00, $00, $00, $00; 7
 
  ; 4x6 font from
-; https://github.com/idispatch/raster-fonts/blob/master/font-4x6.c
+; https://github.com/idispatch/raster-fon(ts/blob/master/font-4x6.c
 ; removed
 
 ; Apple 2 high res lookup tables
-hires1_msb:
-        .byte $20, $24, $28, $2c, $30, $34, $38, $3c
-        .byte $20, $24, $28, $2c, $30, $34, $38, $3c
-        .byte $21, $25, $29, $2d, $31, $35, $39, $3d
-        .byte $21, $25, $29, $2d, $31, $35, $39, $3d
-        .byte $22, $26, $2a, $2e, $32, $36, $3a, $3e
-        .byte $22, $26, $2a, $2e, $32, $36, $3a, $3e
-        .byte $23, $27, $2b, $2f, $33, $37, $3b, $3f
-        .byte $23, $27, $2b, $2f, $33, $37, $3b, $3f
-        .byte $20, $24, $28, $2c, $30, $34, $38, $3c
-        .byte $20, $24, $28, $2c, $30, $34, $38, $3c
-        .byte $21, $25, $29, $2d, $31, $35, $39, $3d
-        .byte $21, $25, $29, $2d, $31, $35, $39, $3d
-        .byte $22, $26, $2a, $2e, $32, $36, $3a, $3e
-        .byte $22, $26, $2a, $2e, $32, $36, $3a, $3e
-        .byte $23, $27, $2b, $2f, $33, $37, $3b, $3f
-        .byte $23, $27, $2b, $2f, $33, $37, $3b, $3f
-        .byte $20, $24, $28, $2c, $30, $34, $38, $3c
-        .byte $20, $24, $28, $2c, $30, $34, $38, $3c
-        .byte $21, $25, $29, $2d, $31, $35, $39, $3d
-        .byte $21, $25, $29, $2d, $31, $35, $39, $3d
-        .byte $22, $26, $2a, $2e, $32, $36, $3a, $3e
-        .byte $22, $26, $2a, $2e, $32, $36, $3a, $3e
-        .byte $23, $27, $2b, $2f, $33, $37, $3b, $3f
-        .byte $23, $27, $2b, $2f, $33, $37, $3b, $3f
-hires_lsb:
-        .byte $00, $00, $00, $00, $00, $00, $00, $00
-        .byte $80, $80, $80, $80, $80, $80, $80, $80
-        .byte $00, $00, $00, $00, $00, $00, $00, $00
-        .byte $80, $80, $80, $80, $80, $80, $80, $80
-        .byte $00, $00, $00, $00, $00, $00, $00, $00
-        .byte $80, $80, $80, $80, $80, $80, $80, $80
-        .byte $00, $00, $00, $00, $00, $00, $00, $00
-        .byte $80, $80, $80, $80, $80, $80, $80, $80
-        .byte $28, $28, $28, $28, $28, $28, $28, $28
-        .byte $a8, $a8, $a8, $a8, $a8, $a8, $a8, $a8
-        .byte $28, $28, $28, $28, $28, $28, $28, $28
-        .byte $a8, $a8, $a8, $a8, $a8, $a8, $a8, $a8
-        .byte $28, $28, $28, $28, $28, $28, $28, $28
-        .byte $a8, $a8, $a8, $a8, $a8, $a8, $a8, $a8
-        .byte $28, $28, $28, $28, $28, $28, $28, $28
-        .byte $a8, $a8, $a8, $a8, $a8, $a8, $a8, $a8
-        .byte $50, $50, $50, $50, $50, $50, $50, $50
-        .byte $d0, $d0, $d0, $d0, $d0, $d0, $d0, $d0
-        .byte $50, $50, $50, $50, $50, $50, $50, $50
-        .byte $d0, $d0, $d0, $d0, $d0, $d0, $d0, $d0
-        .byte $50, $50, $50, $50, $50, $50, $50, $50
-        .byte $d0, $d0, $d0, $d0, $d0, $d0, $d0, $d0
-        .byte $50, $50, $50, $50, $50, $50, $50, $50
-        .byte $d0, $d0, $d0, $d0, $d0, $d0, $d0, $d0
-hires2_msb:
-        .byte $40, $44, $48, $4c, $50, $54, $58, $5c
-        .byte $40, $44, $48, $4c, $50, $54, $58, $5c
-        .byte $41, $45, $49, $4d, $51, $55, $59, $5d
-        .byte $41, $45, $49, $4d, $51, $55, $59, $5d
-        .byte $42, $46, $4a, $4e, $52, $56, $5a, $5e
-        .byte $42, $46, $4a, $4e, $52, $56, $5a, $5e
-        .byte $43, $47, $4b, $4f, $53, $57, $5b, $5f
-        .byte $43, $47, $4b, $4f, $53, $57, $5b, $5f
-        .byte $40, $44, $48, $4c, $50, $54, $58, $5c
-        .byte $40, $44, $48, $4c, $50, $54, $58, $5c
-        .byte $41, $45, $49, $4d, $51, $55, $59, $5d
-        .byte $41, $45, $49, $4d, $51, $55, $59, $5d
-        .byte $42, $46, $4a, $4e, $52, $56, $5a, $5e
-        .byte $42, $46, $4a, $4e, $52, $56, $5a, $5e
-        .byte $43, $47, $4b, $4f, $53, $57, $5b, $5f
-        .byte $43, $47, $4b, $4f, $53, $57, $5b, $5f
-        .byte $40, $44, $48, $4c, $50, $54, $58, $5c
-        .byte $40, $44, $48, $4c, $50, $54, $58, $5c
-        .byte $41, $45, $49, $4d, $51, $55, $59, $5d
-        .byte $41, $45, $49, $4d, $51, $55, $59, $5d
-        .byte $42, $46, $4a, $4e, $52, $56, $5a, $5e
-        .byte $42, $46, $4a, $4e, $52, $56, $5a, $5e
-        .byte $43, $47, $4b, $4f, $53, $57, $5b, $5f
-        .byte $43, $47, $4b, $4f, $53, $57, $5b, $5f
+;hires1_msb:
+;        .byte $20, $24, $28, $2c, $30, $34, $38, $3c
+;        .byte $20, $24, $28, $2c, $30, $34, $38, $3c
+;        .byte $21, $25, $29, $2d, $31, $35, $39, $3d
+;        .byte $21, $25, $29, $2d, $31, $35, $39, $3d
+;        .byte $22, $26, $2a, $2e, $32, $36, $3a, $3e
+;        .byte $22, $26, $2a, $2e, $32, $36, $3a, $3e
+;        .byte $23, $27, $2b, $2f, $33, $37, $3b, $3f
+;        .byte $23, $27, $2b, $2f, $33, $37, $3b, $3f
+;        .byte $20, $24, $28, $2c, $30, $34, $38, $3c
+;        .byte $20, $24, $28, $2c, $30, $34, $38, $3c
+;        .byte $21, $25, $29, $2d, $31, $35, $39, $3d
+;        .byte $21, $25, $29, $2d, $31, $35, $39, $3dc
+;        .byte $22, $26, $2a, $2e, $32, $36, $3a, $3e
+;        .byte $22, $26, $2a, $2e, $32, $36, $3a, $3e
+;        .byte $23, $27, $2b, $2f, $33, $37, $3b, $3f
+;        .byte $23, $27, $2b, $2f, $33, $37, $3b, $3f
+;        .byte $20, $24, $28, $2c, $30, $34, $38, $3c
+;        .byte $20, $24, $28, $2c, $30, $34, $38, $3c
+;        .byte $21, $25, $29, $2d, $31, $35, $39, $3d
+;        .byte $21, $25, $29, $2d, $31, $35, $39, $3d
+;        .byte $22, $26, $2a, $2e, $32, $36, $3a, $3e
+;        .byte $22, $26, $2a, $2e, $32, $36, $3a, $3e
+;        .byte $23, $27, $2b, $2f, $33, $37, $3b, $3f
+;        .byte $23, $27, $2b, $2f, $33, $37, $3b, $3f
+;hires_lsb:
+;        .byte $00, $00, $00, $00, $00, $00, $00, $00
+;        .byte $80, $80, $80, $80, $80, $80, $80, $80
+;        .byte $00, $00, $00, $00, $00, $00, $00, $00
+;        .byte $80, $80, $80, $80, $80, $80, $80, $80
+;        .byte $00, $00, $00, $00, $00, $00, $00, $00
+;        .byte $80, $80, $80, $80, $80, $80, $80, $80
+;        .byte $00, $00, $00, $00, $00, $00, $00, $00
+;        .byte $80, $80, $80, $80, $80, $80, $80, $80
+;        .byte $28, $28, $28, $28, $28, $28, $28, $28
+;        .byte $a8, $a8, $a8, $a8, $a8, $a8, $a8, $a8
+;        .byte $28, $28, $28, $28, $28, $28, $28, $28
+;        .byte $a8, $a8, $a8, $a8, $a8, $a8, $a8, $a8
+;        .byte $28, $28, $28, $28, $28, $28, $28, $28
+;        .byte $a8, $a8, $a8, $a8, $a8, $a8, $a8, $a8
+;        .byte $28, $28, $28, $28, $28, $28, $28, $28
+;        .byte $a8, $a8, $a8, $a8, $a8, $a8, $a8, $a8
+;        .byte $50, $50, $50, $50, $50, $50, $50, $50
+;        .byte $d0, $d0, $d0, $d0, $d0, $d0, $d0, $d0
+;        .byte $50, $50, $50, $50, $50, $50, $50, $50
+;        .byte $d0, $d0, $d0, $d0, $d0, $d0, $d0, $d0
+;        .byte $50, $50, $50, $50, $50, $50, $50, $50
+;        .byte $d0, $d0, $d0, $d0, $d0, $d0, $d0, $d0
+;        .byte $50, $50, $50, $50, $50, $50, $50, $50
+;        .byte $d0, $d0, $d0, $d0, $d0, $d0, $d0, $d0
+;hires2_msb:
+;        .byte $40, $44, $48, $4c, $50, $54, $58, $5c
+;        .byte $40, $44, $48, $4c, $50, $54, $58, $5c
+;        .byte $41, $45, $49, $4d, $51, $55, $59, $5d
+;        .byte $41, $45, $49, $4d, $51, $55, $59, $5d
+;        .byte $42, $46, $4a, $4e, $52, $56, $5a, $5e
+;        .byte $42, $46, $4a, $4e, $52, $56, $5a, $5e
+;        .byte $43, $47, $4b, $4f, $53, $57, $5b, $5f
+;        .byte $43, $47, $4b, $4f, $53, $57, $5b, $5f
+;        .byte $40, $44, $48, $4c, $50, $54, $58, $5c
+;        .byte $40, $44, $48, $4c, $50, $54, $58, $5c
+;        .byte $41, $45, $49, $4d, $51, $55, $59, $5d
+;        .byte $41, $45, $49, $4d, $51, $55, $59, $5d
+;        .byte $42, $46, $4a, $4e, $52, $56, $5a, $5e
+;        .byte $42, $46, $4a, $4e, $52, $56, $5a, $5e
+;        .byte $43, $47, $4b, $4f, $53, $57, $5b, $5f
+;        .byte $43, $47, $4b, $4f, $53, $57, $5b, $5f
+;        .byte $40, $44, $48, $4c, $50, $54, $58, $5c
+;        .byte $40, $44, $48, $4c, $50, $54, $58, $5c
+;        .byte $41, $45, $49, $4d, $51, $55, $59, $5d
+;        .byte $41, $45, $49, $4d, $51, $55, $59, $5d
+;        .byte $42, $46, $4a, $4e, $52, $56, $5a, $5e
+;        .byte $42, $46, $4a, $4e, $52, $56, $5a, $5e
+;        .byte $43, $47, $4b, $4f, $53, $57, $5b, $5f
+;        .byte $43, $47, $4b, $4f, $53, $57, $5b, $5f
 
+; ebadger6502 high res lookup tables
+eb_hires1_msb:
+        .byte $20,$20,$20,$20,$20,$20,$20,$21
+        .byte $21,$21,$21,$21,$21,$22,$22,$22
+        .byte $22,$22,$22,$22,$23,$23,$23,$23
+        .byte $23,$23,$24,$24,$24,$24,$24,$24
+        .byte $25,$25,$25,$25,$25,$25,$25,$26
+        .byte $26,$26,$26,$26,$26,$27,$27,$27
+        .byte $27,$27,$27,$27,$28,$28,$28,$28
+        .byte $28,$28,$29,$29,$29,$29,$29,$29
+        .byte $2A,$2A,$2A,$2A,$2A,$2A,$2A,$2B
+        .byte $2B,$2B,$2B,$2B,$2B,$2C,$2C,$2C
+        .byte $2C,$2C,$2C,$2C,$2D,$2D,$2D,$2D
+        .byte $2D,$2D,$2E,$2E,$2E,$2E,$2E,$2E
+        .byte $2F,$2F,$2F,$2F,$2F,$2F,$2F,$30
+        .byte $30,$30,$30,$30,$30,$31,$31,$31
+        .byte $31,$31,$31,$31,$32,$32,$32,$32
+        .byte $32,$32,$33,$33,$33,$33,$33,$33
+        .byte $34,$34,$34,$34,$34,$34,$34,$35
+        .byte $35,$35,$35,$35,$35,$36,$36,$36
+        .byte $36,$36,$36,$36,$37,$37,$37,$37
+        .byte $37,$37,$38,$38,$38,$38,$38,$38
+        .byte $39,$39,$39,$39,$39,$39,$39,$3A
+        .byte $3A,$3A,$3A,$3A,$3A,$3B,$3B,$3B
+        .byte $3B,$3B,$3B,$3B,$3C,$3C,$3C,$3C
+        .byte $3C,$3C,$3D,$3D,$3D,$3D,$3D,$3D
+        .byte $3E,$3E,$3E,$3E,$3E,$3E,$3E,$3F
+eb_hires_lsb:
+        .byte $00,$28,$50,$78,$A0,$C8,$F0,$18
+        .byte $40,$68,$90,$B8,$E0,$08,$30,$58
+        .byte $80,$A8,$D0,$F8,$20,$48,$70,$98
+        .byte $C0,$E8,$10,$38,$60,$88,$B0,$D8
+        .byte $00,$28,$50,$78,$A0,$C8,$F0,$18
+        .byte $40,$68,$90,$B8,$E0,$08,$30,$58
+        .byte $80,$A8,$D0,$F8,$20,$48,$70,$98
+        .byte $C0,$E8,$10,$38,$60,$88,$B0,$D8
+        .byte $00,$28,$50,$78,$A0,$C8,$F0,$18
+        .byte $40,$68,$90,$B8,$E0,$08,$30,$58
+        .byte $80,$A8,$D0,$F8,$20,$48,$70,$98
+        .byte $C0,$E8,$10,$38,$60,$88,$B0,$D8
+        .byte $00,$28,$50,$78,$A0,$C8,$F0,$18
+        .byte $40,$68,$90,$B8,$E0,$08,$30,$58
+        .byte $80,$A8,$D0,$F8,$20,$48,$70,$98
+        .byte $C0,$E8,$10,$38,$60,$88,$B0,$D8
+        .byte $00,$28,$50,$78,$A0,$C8,$F0,$18
+        .byte $40,$68,$90,$B8,$E0,$08,$30,$58
+        .byte $80,$A8,$D0,$F8,$20,$48,$70,$98
+        .byte $C0,$E8,$10,$38,$60,$88,$B0,$D8
+        .byte $00,$28,$50,$78,$A0,$C8,$F0,$18
+        .byte $40,$68,$90,$B8,$E0,$08,$30,$58
+        .byte $80,$A8,$D0,$F8,$20,$48,$70,$98
+        .byte $C0,$E8,$10,$38,$60,$88,$B0,$D8
+        .byte $00,$28,$50,$78,$A0,$C8,$F0,$18
+eb_hires2_msb:
+        .byte $40,$40,$40,$40,$40,$40,$40,$41
+        .byte $41,$41,$41,$41,$41,$42,$42,$42
+        .byte $42,$42,$42,$42,$43,$43,$43,$43
+        .byte $43,$43,$44,$44,$44,$44,$44,$44
+        .byte $45,$45,$45,$45,$45,$45,$45,$46
+        .byte $46,$46,$46,$46,$46,$47,$47,$47
+        .byte $47,$47,$47,$47,$48,$48,$48,$48
+        .byte $48,$48,$49,$49,$49,$49,$49,$49
+        .byte $4A,$4A,$4A,$4A,$4A,$4A,$4A,$4B
+        .byte $4B,$4B,$4B,$4B,$4B,$4C,$4C,$4C
+        .byte $4C,$4C,$4C,$4C,$4D,$4D,$4D,$4D
+        .byte $4D,$4D,$4E,$4E,$4E,$4E,$4E,$4E
+        .byte $4F,$4F,$4F,$4F,$4F,$4F,$4F,$50
+        .byte $50,$50,$50,$50,$50,$51,$51,$51
+        .byte $51,$51,$51,$51,$52,$52,$52,$52
+        .byte $52,$52,$53,$53,$53,$53,$53,$53
+        .byte $54,$54,$54,$54,$54,$54,$54,$55
+        .byte $55,$55,$55,$55,$55,$56,$56,$56
+        .byte $56,$56,$56,$56,$57,$57,$57,$57
+        .byte $57,$57,$58,$58,$58,$58,$58,$58
+        .byte $59,$59,$59,$59,$59,$59,$59,$5A
+        .byte $5A,$5A,$5A,$5A,$5A,$5B,$5B,$5B
+        .byte $5B,$5B,$5B,$5B,$5C,$5C,$5C,$5C
+        .byte $5C,$5C,$5D,$5D,$5D,$5D,$5D,$5D
+        .byte $5E,$5E,$5E,$5E,$5E,$5E,$5E,$5F
+
+font6x8:
+        .byte $00,$00,$00,$00,$00,$00,$00,$00      ;  0
+        .byte $38,$44,$6c,$44,$54,$44,$38,$00      ;  1
+        .byte $38,$7c,$54,$7c,$44,$7c,$38,$00      ;  2
+        .byte $00,$28,$7c,$7c,$7c,$38,$10,$00      ;  3
+        .byte $00,$10,$38,$7c,$7c,$38,$10,$00      ;  4
+        .byte $10,$38,$38,$10,$7c,$7c,$10,$00      ;  5
+        .byte $00,$10,$38,$7c,$7c,$10,$38,$00      ;  6
+        .byte $00,$00,$00,$30,$30,$00,$00,$00      ;  7
+        .byte $fc,$fc,$fc,$cc,$cc,$fc,$fc,$fc      ;  8
+        .byte $00,$00,$78,$48,$48,$78,$00,$00      ;  9
+        .byte $fc,$fc,$84,$b4,$b4,$84,$fc,$fc      ;  10
+        .byte $00,$1c,$0c,$34,$48,$48,$30,$00      ;  11
+        .byte $38,$44,$44,$38,$10,$38,$10,$00      ;  12
+        .byte $10,$18,$14,$10,$30,$70,$60,$00      ;  13
+        .byte $0c,$34,$2c,$34,$2c,$6c,$60,$00      ;  14
+        .byte $00,$54,$38,$6c,$38,$54,$00,$00      ;  15
+        .byte $20,$30,$38,$3c,$38,$30,$20,$00      ;  16
+        .byte $08,$18,$38,$78,$38,$18,$08,$00      ;  17
+        .byte $10,$38,$7c,$10,$7c,$38,$10,$00      ;  18
+        .byte $28,$28,$28,$28,$28,$00,$28,$00      ;  19
+        .byte $3c,$54,$54,$34,$14,$14,$14,$00      ;  20
+        .byte $38,$44,$30,$28,$18,$44,$38,$00      ;  21
+        .byte $00,$00,$00,$00,$00,$78,$78,$00      ;  22
+        .byte $10,$38,$7c,$10,$7c,$38,$10,$38      ;  23
+        .byte $10,$38,$7c,$10,$10,$10,$10,$00      ;  24
+        .byte $10,$10,$10,$10,$7c,$38,$10,$00      ;  25
+        .byte $00,$10,$18,$7c,$18,$10,$00,$00      ;  26
+        .byte $00,$10,$30,$7c,$30,$10,$00,$00      ;  27
+        .byte $00,$00,$00,$40,$40,$40,$7c,$00      ;  28
+        .byte $00,$28,$28,$7c,$28,$28,$00,$00      ;  29
+        .byte $10,$10,$38,$38,$7c,$7c,$00,$00      ;  30
+        .byte $7c,$7c,$38,$38,$10,$10,$00,$00      ;  31
+        .byte $00,$00,$00,$00,$00,$00,$00,$00      ;  32, " "
+        .byte $10,$38,$38,$10,$10,$00,$10,$00      ;  33, "!"
+        .byte $6c,$6c,$48,$00,$00,$00,$00,$00      ;  34, """
+        .byte $00,$28,$7c,$28,$28,$7c,$28,$00      ;  35, "#"
+        .byte $20,$38,$40,$30,$08,$70,$10,$00      ;  36, "$"
+        .byte $64,$64,$08,$10,$20,$4c,$4c,$00      ;  37, "%"
+        .byte $20,$50,$50,$20,$54,$48,$34,$00      ;  38, "&"
+        .byte $30,$30,$20,$00,$00,$00,$00,$00      ;  39, "'"
+        .byte $10,$20,$20,$20,$20,$20,$10,$00      ;  40, "("
+        .byte $20,$10,$10,$10,$10,$10,$20,$00      ;  41, ")"
+        .byte $00,$28,$38,$7c,$38,$28,$00,$00      ;  42, "*"
+        .byte $00,$10,$10,$7c,$10,$10,$00,$00      ;  43, "+"
+        .byte $00,$00,$00,$00,$00,$30,$30,$20      ;  44, ","
+        .byte $00,$00,$00,$7c,$00,$00,$00,$00      ;  45, "-"
+        .byte $00,$00,$00,$00,$00,$30,$30,$00      ;  46, "."
+        .byte $00,$04,$08,$10,$20,$40,$00,$00      ;  47, "/"
+        .byte $38,$44,$4c,$54,$64,$44,$38,$00      ;  48, "0"
+        .byte $10,$30,$10,$10,$10,$10,$38,$00      ;  49, "1"
+        .byte $38,$44,$04,$18,$20,$40,$7c,$00      ;  50, "2"
+        .byte $38,$44,$04,$38,$04,$44,$38,$00      ;  51, "3"
+        .byte $08,$18,$28,$48,$7c,$08,$08,$00      ;  52, "4"
+        .byte $7c,$40,$40,$78,$04,$44,$38,$00      ;  53, "5"
+        .byte $18,$20,$40,$78,$44,$44,$38,$00      ;  54, "6"
+        .byte $7c,$04,$08,$10,$20,$20,$20,$00      ;  55, "7"
+        .byte $38,$44,$44,$38,$44,$44,$38,$00      ;  56, "8"
+        .byte $38,$44,$44,$3c,$04,$08,$30,$00      ;  57, "9"
+        .byte $00,$00,$30,$30,$00,$30,$30,$00      ;  58, ":"
+        .byte $00,$00,$30,$30,$00,$30,$30,$20      ;  59, ";"
+        .byte $08,$10,$20,$40,$20,$10,$08,$00      ;  60, "<"
+        .byte $00,$00,$7c,$00,$00,$7c,$00,$00      ;  61, "="
+        .byte $20,$10,$08,$04,$08,$10,$20,$00      ;  62, ">"
+        .byte $38,$44,$04,$18,$10,$00,$10,$00      ;  63, "?"
+        .byte $38,$44,$5c,$54,$5c,$40,$38,$00      ;  64, "@"
+        .byte $38,$44,$44,$44,$7c,$44,$44,$00      ;  65, "A"
+        .byte $78,$44,$44,$78,$44,$44,$78,$00      ;  66, "B"
+        .byte $38,$44,$40,$40,$40,$44,$38,$00      ;  67, "C"
+        .byte $78,$44,$44,$44,$44,$44,$78,$00      ;  68, "D"
+        .byte $7c,$40,$40,$78,$40,$40,$7c,$00      ;  69, "E"
+        .byte $7c,$40,$40,$78,$40,$40,$40,$00      ;  70, "F"
+        .byte $38,$44,$40,$5c,$44,$44,$3c,$00      ;  71, "G"
+        .byte $44,$44,$44,$7c,$44,$44,$44,$00      ;  72, "H"
+        .byte $38,$10,$10,$10,$10,$10,$38,$00      ;  73, "I"
+        .byte $04,$04,$04,$04,$44,$44,$38,$00      ;  74, "J"
+        .byte $44,$48,$50,$60,$50,$48,$44,$00      ;  75, "K"
+        .byte $40,$40,$40,$40,$40,$40,$7c,$00      ;  76, "L"
+        .byte $44,$6c,$54,$44,$44,$44,$44,$00      ;  77, "M"
+        .byte $44,$64,$54,$4c,$44,$44,$44,$00      ;  78, "N"
+        .byte $38,$44,$44,$44,$44,$44,$38,$00      ;  79, "O"
+        .byte $78,$44,$44,$78,$40,$40,$40,$00      ;  80, "P"
+        .byte $38,$44,$44,$44,$54,$48,$34,$00      ;  81, "Q"
+        .byte $78,$44,$44,$78,$48,$44,$44,$00      ;  82, "R"
+        .byte $38,$44,$40,$38,$04,$44,$38,$00      ;  83, "S"
+        .byte $7c,$10,$10,$10,$10,$10,$10,$00      ;  84, "T"
+        .byte $44,$44,$44,$44,$44,$44,$38,$00      ;  85, "U"
+        .byte $44,$44,$44,$44,$44,$28,$10,$00      ;  86, "V"
+        .byte $44,$44,$54,$54,$54,$54,$28,$00      ;  87, "W"
+        .byte $44,$44,$28,$10,$28,$44,$44,$00      ;  88, "X"
+        .byte $44,$44,$44,$28,$10,$10,$10,$00      ;  89, "Y"
+        .byte $78,$08,$10,$20,$40,$40,$78,$00      ;  90, "Z"
+        .byte $38,$20,$20,$20,$20,$20,$38,$00      ;  91, "["
+        .byte $00,$40,$20,$10,$08,$04,$00,$00      ;  92, "\"
+        .byte $38,$08,$08,$08,$08,$08,$38,$00      ;  93, "]"
+        .byte $10,$28,$44,$00,$00,$00,$00,$00      ;  94, "^"
+        .byte $00,$00,$00,$00,$00,$00,$00,$fc      ;  95, "_"
+        .byte $30,$30,$10,$00,$00,$00,$00,$00      ;  96, "`"
+        .byte $00,$00,$38,$04,$3c,$44,$3c,$00      ;  97, "a"
+        .byte $40,$40,$78,$44,$44,$44,$78,$00      ;  98, "b"
+        .byte $00,$00,$38,$44,$40,$44,$38,$00      ;  99, "c"
+        .byte $04,$04,$3c,$44,$44,$44,$3c,$00      ;  100, "d"
+        .byte $00,$00,$38,$44,$78,$40,$38,$00      ;  101, "e"
+        .byte $18,$20,$20,$78,$20,$20,$20,$00      ;  102, "f"
+        .byte $00,$00,$3c,$44,$44,$3c,$04,$38      ;  103, "g"
+        .byte $40,$40,$70,$48,$48,$48,$48,$00      ;  104, "h"
+        .byte $10,$00,$10,$10,$10,$10,$18,$00      ;  105, "i"
+        .byte $08,$00,$18,$08,$08,$08,$48,$30      ;  106, "j"
+        .byte $40,$40,$48,$50,$60,$50,$48,$00      ;  107, "k"
+        .byte $10,$10,$10,$10,$10,$10,$18,$00      ;  108, "l"
+        .byte $00,$00,$68,$54,$54,$44,$44,$00      ;  109, "m"
+        .byte $00,$00,$70,$48,$48,$48,$48,$00      ;  110, "n"
+        .byte $00,$00,$38,$44,$44,$44,$38,$00      ;  111, "o"
+        .byte $00,$00,$78,$44,$44,$44,$78,$40      ;  112, "p"
+        .byte $00,$00,$3c,$44,$44,$44,$3c,$04      ;  113, "q"
+        .byte $00,$00,$58,$24,$20,$20,$70,$00      ;  114, "r"
+        .byte $00,$00,$38,$40,$38,$04,$38,$00      ;  115, "s"
+        .byte $00,$20,$78,$20,$20,$28,$10,$00      ;  116, "t"
+        .byte $00,$00,$48,$48,$48,$58,$28,$00      ;  117, "u"
+        .byte $00,$00,$44,$44,$44,$28,$10,$00      ;  118, "v"
+        .byte $00,$00,$44,$44,$54,$7c,$28,$00      ;  119, "w"
+        .byte $00,$00,$48,$48,$30,$48,$48,$00      ;  120, "x"
+        .byte $00,$00,$48,$48,$48,$38,$10,$60      ;  121, "y"
+        .byte $00,$00,$78,$08,$30,$40,$78,$00      ;  122, "z"
+        .byte $18,$20,$20,$60,$20,$20,$18,$00      ;  123, "{"
+        .byte $10,$10,$10,$00,$10,$10,$10,$00      ;  124, "|"
+        .byte $30,$08,$08,$0c,$08,$08,$30,$00      ;  125, "}"
+        .byte $28,$50,$00,$00,$00,$00,$00,$00      ;  126, "~"
+        .byte $10,$38,$6c,$44,$44,$7c,$00,$00      ;  127
+        .byte $38,$44,$40,$40,$44,$38,$10,$30      ;  128
+        .byte $48,$00,$48,$48,$48,$58,$28,$00      ;  129
+        .byte $0c,$00,$38,$44,$78,$40,$38,$00      ;  130
+        .byte $38,$00,$38,$04,$3c,$44,$3c,$00      ;  131
+        .byte $28,$00,$38,$04,$3c,$44,$3c,$00      ;  132
+        .byte $30,$00,$38,$04,$3c,$44,$3c,$00      ;  133
+        .byte $38,$28,$38,$04,$3c,$44,$3c,$00      ;  134
+        .byte $00,$38,$44,$40,$44,$38,$10,$30      ;  135
+        .byte $38,$00,$38,$44,$78,$40,$38,$00      ;  136
+        .byte $28,$00,$38,$44,$78,$40,$38,$00      ;  137
+        .byte $30,$00,$38,$44,$78,$40,$38,$00      ;  138
+        .byte $28,$00,$10,$10,$10,$10,$18,$00      ;  139
+        .byte $10,$28,$00,$10,$10,$10,$18,$00      ;  140
+        .byte $20,$00,$10,$10,$10,$10,$18,$00      ;  141
+        .byte $28,$00,$10,$28,$44,$7c,$44,$00      ;  142
+        .byte $38,$28,$38,$6c,$44,$7c,$44,$00      ;  143
+        .byte $0c,$00,$7c,$40,$78,$40,$7c,$00      ;  144
+        .byte $00,$00,$78,$14,$7c,$50,$3c,$00      ;  145
+        .byte $3c,$50,$50,$7c,$50,$50,$5c,$00      ;  146
+        .byte $38,$00,$30,$48,$48,$48,$30,$00      ;  147
+        .byte $28,$00,$30,$48,$48,$48,$30,$00      ;  148
+        .byte $60,$00,$30,$48,$48,$48,$30,$00      ;  149
+        .byte $38,$00,$48,$48,$48,$58,$28,$00      ;  150
+        .byte $60,$00,$48,$48,$48,$58,$28,$00      ;  151
+        .byte $28,$00,$48,$48,$48,$38,$10,$60      ;  152
+        .byte $48,$30,$48,$48,$48,$48,$30,$00      ;  153
+        .byte $28,$00,$48,$48,$48,$48,$30,$00      ;  154
+        .byte $00,$10,$38,$40,$40,$38,$10,$00      ;  155
+        .byte $18,$24,$20,$78,$20,$24,$5c,$00      ;  156
+        .byte $44,$28,$10,$7c,$10,$7c,$10,$00      ;  157
+        .byte $60,$50,$50,$68,$5c,$48,$48,$00      ;  158
+        .byte $08,$14,$10,$38,$10,$10,$50,$20      ;  159
+        .byte $18,$00,$38,$04,$3c,$44,$3c,$00      ;  160
+        .byte $18,$00,$10,$10,$10,$10,$18,$00      ;  161
+        .byte $18,$00,$30,$48,$48,$48,$30,$00      ;  162
+        .byte $18,$00,$48,$48,$48,$58,$28,$00      ;  163
+        .byte $28,$50,$00,$70,$48,$48,$48,$00      ;  164
+        .byte $28,$50,$00,$48,$68,$58,$48,$00      ;  165
+        .byte $38,$04,$3c,$44,$3c,$00,$3c,$00      ;  166
+        .byte $30,$48,$48,$48,$30,$00,$78,$00      ;  167
+        .byte $10,$00,$10,$30,$40,$44,$38,$00      ;  168
+        .byte $00,$00,$7c,$40,$40,$40,$00,$00      ;  169
+        .byte $00,$00,$fc,$04,$04,$00,$00,$00      ;  170
+        .byte $40,$48,$50,$38,$44,$08,$1c,$00      ;  171
+        .byte $40,$48,$50,$2c,$54,$1c,$04,$00      ;  172
+        .byte $10,$00,$10,$10,$38,$38,$10,$00      ;  173
+        .byte $00,$00,$24,$48,$24,$00,$00,$00      ;  174
+        .byte $00,$00,$48,$24,$48,$00,$00,$00      ;  175
+        .byte $54,$00,$a8,$00,$54,$00,$a8,$00      ;  176
+        .byte $54,$a8,$54,$a8,$54,$a8,$54,$a8      ;  177
+        .byte $a8,$fc,$54,$fc,$a8,$fc,$54,$fc      ;  178
+        .byte $10,$10,$10,$10,$10,$10,$10,$10      ;  179
+        .byte $10,$10,$10,$f0,$10,$10,$10,$10      ;  180
+        .byte $10,$f0,$10,$f0,$10,$10,$10,$10      ;  181
+        .byte $50,$50,$50,$d0,$50,$50,$50,$50      ;  182
+        .byte $00,$00,$00,$f0,$50,$50,$50,$50      ;  183
+        .byte $00,$f0,$10,$f0,$10,$10,$10,$10      ;  184
+        .byte $50,$d0,$10,$d0,$50,$50,$50,$50      ;  185
+        .byte $50,$50,$50,$50,$50,$50,$50,$50      ;  186
+        .byte $00,$f0,$10,$d0,$50,$50,$50,$50      ;  187
+        .byte $50,$d0,$10,$f0,$00,$00,$00,$00      ;  188
+        .byte $50,$50,$50,$f0,$00,$00,$00,$00      ;  189
+        .byte $10,$f0,$10,$f0,$00,$00,$00,$00      ;  190
+        .byte $00,$00,$00,$f0,$10,$10,$10,$10      ;  191
+        .byte $10,$10,$10,$1c,$00,$00,$00,$00      ;  192
+        .byte $10,$10,$10,$fc,$00,$00,$00,$00      ;  193
+        .byte $00,$00,$00,$fc,$10,$10,$10,$10      ;  194
+        .byte $10,$10,$10,$1c,$10,$10,$10,$10      ;  195
+        .byte $00,$00,$00,$fc,$00,$00,$00,$00      ;  196
+        .byte $10,$10,$10,$fc,$10,$10,$10,$10      ;  197
+        .byte $10,$1c,$10,$1c,$10,$10,$10,$10      ;  198
+        .byte $50,$50,$50,$5c,$50,$50,$50,$50      ;  199
+        .byte $50,$5c,$40,$7c,$00,$00,$00,$00      ;  200
+        .byte $00,$7c,$40,$5c,$50,$50,$50,$50      ;  201
+        .byte $50,$dc,$00,$fc,$00,$00,$00,$00      ;  202
+        .byte $00,$fc,$00,$dc,$50,$50,$50,$50      ;  203
+        .byte $50,$5c,$40,$5c,$50,$50,$50,$50      ;  204
+        .byte $00,$fc,$00,$fc,$00,$00,$00,$00      ;  205
+        .byte $50,$dc,$00,$dc,$50,$50,$50,$50      ;  206
+        .byte $10,$fc,$00,$fc,$00,$00,$00,$00      ;  207
+        .byte $50,$50,$50,$fc,$00,$00,$00,$00      ;  208
+        .byte $00,$fc,$00,$fc,$10,$10,$10,$10      ;  209
+        .byte $00,$00,$00,$fc,$50,$50,$50,$50      ;  210
+        .byte $50,$50,$50,$7c,$00,$00,$00,$00      ;  211
+        .byte $10,$1c,$10,$1c,$00,$00,$00,$00      ;  212
+        .byte $00,$1c,$10,$1c,$10,$10,$10,$10      ;  213
+        .byte $00,$00,$00,$7c,$50,$50,$50,$50      ;  214
+        .byte $50,$50,$50,$dc,$50,$50,$50,$50      ;  215
+        .byte $10,$fc,$00,$fc,$10,$10,$10,$10      ;  216
+        .byte $10,$10,$10,$f0,$00,$00,$00,$00      ;  217
+        .byte $00,$00,$00,$1c,$10,$10,$10,$10      ;  218
+        .byte $fc,$fc,$fc,$fc,$fc,$fc,$fc,$fc      ;  219
+        .byte $00,$00,$00,$00,$fc,$fc,$fc,$fc      ;  220
+        .byte $e0,$e0,$e0,$e0,$e0,$e0,$e0,$e0      ;  221
+        .byte $1c,$1c,$1c,$1c,$1c,$1c,$1c,$1c      ;  222
+        .byte $fc,$fc,$fc,$fc,$00,$00,$00,$00      ;  223
+        .byte $00,$00,$34,$48,$48,$34,$00,$00      ;  224
+        .byte $00,$70,$48,$70,$48,$48,$70,$40      ;  225
+        .byte $78,$48,$40,$40,$40,$40,$40,$00      ;  226
+        .byte $00,$7c,$28,$28,$28,$28,$28,$00      ;  227
+        .byte $78,$48,$20,$10,$20,$48,$78,$00      ;  228
+        .byte $00,$00,$3c,$48,$48,$30,$00,$00      ;  229
+        .byte $00,$00,$48,$48,$48,$70,$40,$40      ;  230
+        .byte $00,$00,$28,$50,$10,$10,$10,$00      ;  231
+        .byte $38,$10,$38,$44,$38,$10,$38,$00      ;  232
+        .byte $30,$48,$48,$78,$48,$48,$30,$00      ;  233
+        .byte $00,$38,$44,$44,$28,$28,$6c,$00      ;  234
+        .byte $30,$40,$20,$10,$38,$48,$30,$00      ;  235
+        .byte $00,$00,$28,$54,$54,$28,$00,$00      ;  236
+        .byte $00,$10,$38,$54,$54,$38,$10,$00      ;  237
+        .byte $00,$38,$40,$78,$40,$38,$00,$00      ;  238
+        .byte $00,$30,$48,$48,$48,$48,$00,$00      ;  239
+        .byte $00,$78,$00,$78,$00,$78,$00,$00      ;  240
+        .byte $00,$10,$38,$10,$00,$38,$00,$00      ;  241
+        .byte $40,$30,$08,$30,$40,$00,$78,$00      ;  242
+        .byte $08,$30,$40,$30,$08,$00,$78,$00      ;  243
+        .byte $00,$08,$14,$10,$10,$10,$10,$10      ;  244
+        .byte $10,$10,$10,$10,$10,$50,$20,$00      ;  245
+        .byte $00,$10,$00,$7c,$00,$10,$00,$00      ;  246
+        .byte $00,$28,$50,$00,$28,$50,$00,$00      ;  247
+        .byte $30,$48,$48,$30,$00,$00,$00,$00      ;  248
+        .byte $00,$00,$00,$30,$30,$00,$00,$00      ;  249
+        .byte $00,$00,$00,$20,$00,$00,$00,$00      ;  250
+        .byte $00,$1c,$10,$10,$50,$50,$20,$00      ;  251
+        .byte $50,$28,$28,$28,$00,$00,$00,$00      ;  252
+        .byte $60,$10,$20,$70,$00,$00,$00,$00      ;  253
+        .byte $00,$00,$78,$78,$78,$78,$00,$00      ;  254
+        .byte $00,$00,$00,$00,$00,$00,$00,$00      ;  255
 
 ; ****************************************************************************************************************
 ;  The WOZ Monitor for the Apple 1
