@@ -1,6 +1,6 @@
 ;memory map
 
-;0x0000 0xCFFF RAM 52KB
+;0x0000 0xCFFF RAM 48KB
 ;0xC000 0xC0FF Devices 
 ;0xC100 0xE2FF Basic ROM
 ;0xE300 0xFFFF OS
@@ -469,7 +469,7 @@ draw_pixel:
     sec
 
 @shiftloop:   
-    rol       
+    ror       
     dex
     bne @shiftloop
 
