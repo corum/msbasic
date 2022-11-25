@@ -112,8 +112,8 @@ KEYLAST   = $D3
 
 TEMP      = $D4
 
-KBBUF     = $500
-KEYSTATE  = $600
+KBBUF     = $200
+KEYSTATE  = $300
 
 
 ;INPUTBUF = $300
@@ -798,6 +798,8 @@ console_add_char:
     bra @done
 
 @dolf:
+    lda #$00
+    sta CHAR_DRAW
     inc CURSOR_Y
     lda CURSOR_Y
     cmp #$19    ; line 25?  scroll
@@ -806,6 +808,8 @@ console_add_char:
     jsr scroll_console
     bra @done
 @docr:
+    lda #$00
+    sta CHAR_DRAW
     stz CURSOR_X
     bra @done
 
