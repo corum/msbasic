@@ -340,9 +340,10 @@ read_char:
 ; DISPLAY 
 
 display_char:
-    jsr tx_char_sync
+    jsr tx_char_sync    
     jsr console_add_char
     ;jsr char_to_screen
+@done: 
     rts
 
 
@@ -359,8 +360,11 @@ _cls:
 
     lda #$00
     sta DRAW_COLOR
-    
+    sta CURSOR_X
+    sta CURSOR_Y
+
     jsr fillscreen
+    jsr clear_text_region
 
     pla
     rts
@@ -701,19 +705,62 @@ draw_line:
 ; CONSOLE AND FONT
 ; ==============================================
 
+clear_text_region:
+    pha
+    phx
+    phy
+
+@clearinput:
+    ; clear the last line and draw screen
+    ldx #$0
+    ldy #$0
+
+@loopy:
+    lda eb_text_msb, y
+    sta DEST_HIGH
+    lda eb_text_lsb, y
+    sta DEST_LOW
+    lda #$00
+
+; clear the input line
+@loopx:
+    sta (DEST_LOW)
+
+    inc DEST_LOW
+    bne @skipinc
+    inc DEST_HIGH
+@skipinc:
+    inx
+    cpx #$28
+    bne @loopx
+    iny
+    cpy #$19
+    bne @loopy
+
+    ply
+    plx
+    pla
+
+    rts
+
 console_add_char:
     pha
     phy
     sta CHAR_DRAW
 
 ; check for non printables
+    cmp #$00
+    beq @done
     cmp #$0D
     beq @docr
     cmp #$0A
     beq @dolf
+    cmp #$1b
+    beq @clear
     cmp #$8
     bne @storechar
 
+@backspace:
 ;backspace handling
     lda CURSOR_X
     beq @storechar
@@ -734,17 +781,22 @@ console_add_char:
     sta (CURSOR_ADDR),Y
 
     ; if 0 char, skip to done
-    bne @advance
+    bne @draw
     dec CURSOR_X
+    jsr draw_char
     bra @done
+
+@draw:
+    jsr draw_char
 
 @advance:
     inc CURSOR_X
     lda CURSOR_X
     cmp #$38        ; 40 chars max
-    bne @draw
-@docr:
+    bne @done
     stz CURSOR_X
+    bra @done
+
 @dolf:
     inc CURSOR_Y
     lda CURSOR_Y
@@ -753,8 +805,13 @@ console_add_char:
     dec CURSOR_Y
     jsr scroll_console
     bra @done
-@draw:
-    jsr draw_char   
+@docr:
+    stz CURSOR_X
+    bra @done
+
+@clear:
+    jsr cls
+
 @done:
     ply
     pla    
