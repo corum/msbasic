@@ -706,30 +706,26 @@ clear_text_region:
 
 @clearinput:
     ; clear the last line and draw screen
-    ldx #$0
     ldy #$0
+    ldx #$0
 
-@loopy:
-    lda eb_text_msb, y
+@loopx:
+    lda eb_text_msb, x
     sta DEST_HIGH
-    lda eb_text_lsb, y
+    lda eb_text_lsb, x
     sta DEST_LOW
     lda #$00
 
 ; clear the input line
-@loopx:
-    sta (DEST_LOW)
+@loopy:
+    sta (DEST_LOW),Y
 
-    inc DEST_LOW
-    bne @skipinc
-    inc DEST_HIGH
-@skipinc:
-    inx
-    cpx #$28
-    bne @loopx
     iny
-    cpy #$19
+    cpy #$28
     bne @loopy
+    inx
+    cpx #$19
+    bne @loopx
 
     ply
     plx
@@ -1009,75 +1005,6 @@ draw_char:
     pla
     rts
 
-; DRAW CHARACTER
-draw_char_old:
-    pha
-    phx
-    phy
-
-    lda #<font_lookup
-    sta FONTPTR
-    lda #>font_lookup
-    sta FONTPTR_H
-
-    clc
-    lda CHAR_DRAW
-    asl
-    bcc @nohigh
-    inc FONTPTR_H
-@nohigh:
-
-    clc
-    adc FONTPTR
-    sta FONTPTR
-    bcc @nohigh2
-    inc FONTPTR_H
-@nohigh2:
-
-    ldy #$1
-    lda (FONTPTR)
-    tax
-    lda (FONTPTR),y
-    sta FONTPTR_H
-    stx FONTPTR
-
-    clc
-    lda CURSOR_Y
-    asl
-    asl
-    asl
-    tay
-
-    ldx #$00
-@loopy:                  ; loop through 8 lines per char
-    lda (HIRESPAGE),y
-    sta ORIGIN_H
-    lda eb_hires_lsb,y
-
-    clc
-    adc CURSOR_X
-    bcc @skipcarry
-    inc ORIGIN_H
-@skipcarry:
-
-    sta ORIGIN_L
-    
-    lda (FONTPTR)
-    sta (ORIGIN_L)
-
-    inc FONTPTR
-    bne @skipcarry2
-    inc FONTPTR_H
-@skipcarry2:
-    iny
-    inx
-    cpx #$8
-    bne @loopy
-
-    ply
-    plx
-    pla
-    rts
 
 ; ============================================================================================
 ; graphics tests
@@ -1758,71 +1685,6 @@ eb_text_lsb:
         .byte $20,$48,$70,$98
         .byte $C0
 
-font_lookup:
-        .addr font8x8+$0000,font8x8+$0008,font8x8+$0010,font8x8+$0018
-        .addr font8x8+$0020,font8x8+$0028,font8x8+$0030,font8x8+$0038
-        .addr font8x8+$0040,font8x8+$0048,font8x8+$0050,font8x8+$0058
-        .addr font8x8+$0060,font8x8+$0068,font8x8+$0070,font8x8+$0078
-        .addr font8x8+$0080,font8x8+$0088,font8x8+$0090,font8x8+$0098
-        .addr font8x8+$00A0,font8x8+$00A8,font8x8+$00B0,font8x8+$00B8
-        .addr font8x8+$00C0,font8x8+$00C8,font8x8+$00D0,font8x8+$00D8
-        .addr font8x8+$00E0,font8x8+$00E8,font8x8+$00F0,font8x8+$00F8
-        .addr font8x8+$0100,font8x8+$0108,font8x8+$0110,font8x8+$0118
-        .addr font8x8+$0120,font8x8+$0128,font8x8+$0130,font8x8+$0138
-        .addr font8x8+$0140,font8x8+$0148,font8x8+$0150,font8x8+$0158
-        .addr font8x8+$0160,font8x8+$0168,font8x8+$0170,font8x8+$0178
-        .addr font8x8+$0180,font8x8+$0188,font8x8+$0190,font8x8+$0198
-        .addr font8x8+$01A0,font8x8+$01A8,font8x8+$01B0,font8x8+$01B8
-        .addr font8x8+$01C0,font8x8+$01C8,font8x8+$01D0,font8x8+$01D8
-        .addr font8x8+$01E0,font8x8+$01E8,font8x8+$01F0,font8x8+$01F8
-        .addr font8x8+$0200,font8x8+$0208,font8x8+$0210,font8x8+$0218
-        .addr font8x8+$0220,font8x8+$0228,font8x8+$0230,font8x8+$0238
-        .addr font8x8+$0240,font8x8+$0248,font8x8+$0250,font8x8+$0258
-        .addr font8x8+$0260,font8x8+$0268,font8x8+$0270,font8x8+$0278
-        .addr font8x8+$0280,font8x8+$0288,font8x8+$0290,font8x8+$0298
-        .addr font8x8+$02A0,font8x8+$02A8,font8x8+$02B0,font8x8+$02B8
-        .addr font8x8+$02C0,font8x8+$02C8,font8x8+$02D0,font8x8+$02D8
-        .addr font8x8+$02E0,font8x8+$02E8,font8x8+$02F0,font8x8+$02F8
-        .addr font8x8+$0300,font8x8+$0308,font8x8+$0310,font8x8+$0318
-        .addr font8x8+$0320,font8x8+$0328,font8x8+$0330,font8x8+$0338
-        .addr font8x8+$0340,font8x8+$0348,font8x8+$0350,font8x8+$0358
-        .addr font8x8+$0360,font8x8+$0368,font8x8+$0370,font8x8+$0378
-        .addr font8x8+$0380,font8x8+$0388,font8x8+$0390,font8x8+$0398
-        .addr font8x8+$03A0,font8x8+$03A8,font8x8+$03B0,font8x8+$03B8
-        .addr font8x8+$03C0,font8x8+$03C8,font8x8+$03D0,font8x8+$03D8
-        .addr font8x8+$03E0,font8x8+$03E8,font8x8+$03F0,font8x8+$03F8
-        .addr font8x8+$0400,font8x8+$0408,font8x8+$0410,font8x8+$0418
-        .addr font8x8+$0420,font8x8+$0428,font8x8+$0430,font8x8+$0438
-        .addr font8x8+$0440,font8x8+$0448,font8x8+$0450,font8x8+$0458
-        .addr font8x8+$0460,font8x8+$0468,font8x8+$0470,font8x8+$0478
-        .addr font8x8+$0480,font8x8+$0488,font8x8+$0490,font8x8+$0498
-        .addr font8x8+$04A0,font8x8+$04A8,font8x8+$04B0,font8x8+$04B8
-        .addr font8x8+$04C0,font8x8+$04C8,font8x8+$04D0,font8x8+$04D8
-        .addr font8x8+$04E0,font8x8+$04E8,font8x8+$04F0,font8x8+$04F8
-        .addr font8x8+$0500,font8x8+$0508,font8x8+$0510,font8x8+$0518
-        .addr font8x8+$0520,font8x8+$0528,font8x8+$0530,font8x8+$0538
-        .addr font8x8+$0540,font8x8+$0548,font8x8+$0550,font8x8+$0558
-        .addr font8x8+$0560,font8x8+$0568,font8x8+$0570,font8x8+$0578
-        .addr font8x8+$0580,font8x8+$0588,font8x8+$0590,font8x8+$0598
-        .addr font8x8+$05A0,font8x8+$05A8,font8x8+$05B0,font8x8+$05B8
-        .addr font8x8+$05C0,font8x8+$05C8,font8x8+$05D0,font8x8+$05D8
-        .addr font8x8+$05E0,font8x8+$05E8,font8x8+$05F0,font8x8+$05F8
-        .addr font8x8+$0600,font8x8+$0608,font8x8+$0610,font8x8+$0618
-        .addr font8x8+$0620,font8x8+$0628,font8x8+$0630,font8x8+$0638
-        .addr font8x8+$0640,font8x8+$0648,font8x8+$0650,font8x8+$0658
-        .addr font8x8+$0660,font8x8+$0668,font8x8+$0670,font8x8+$0678
-        .addr font8x8+$0680,font8x8+$0688,font8x8+$0690,font8x8+$0698
-        .addr font8x8+$06A0,font8x8+$06A8,font8x8+$06B0,font8x8+$06B8
-        .addr font8x8+$06C0,font8x8+$06C8,font8x8+$06D0,font8x8+$06D8
-        .addr font8x8+$06E0,font8x8+$06E8,font8x8+$06F0,font8x8+$06F8
-        .addr font8x8+$0700,font8x8+$0708,font8x8+$0710,font8x8+$0718
-        .addr font8x8+$0720,font8x8+$0728,font8x8+$0730,font8x8+$0738
-        .addr font8x8+$0740,font8x8+$0748,font8x8+$0750,font8x8+$0758
-        .addr font8x8+$0760,font8x8+$0768,font8x8+$0770,font8x8+$0778
-        .addr font8x8+$0780,font8x8+$0788,font8x8+$0790,font8x8+$0798
-        .addr font8x8+$07A0,font8x8+$07A8,font8x8+$07B0,font8x8+$07B8
-        .addr font8x8+$07C0,font8x8+$07C8,font8x8+$07D0,font8x8+$07D8
-        .addr font8x8+$07E0,font8x8+$07E8,font8x8+$07F0,font8x8+$07F8
 
 .segment "FONT"
 font8x8:
