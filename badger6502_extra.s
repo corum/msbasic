@@ -234,8 +234,10 @@ tx_char_sync:
     sta A_TXD
 
     ;jsr console_add_char
+    
     ; workaround for WDC chip
-    jsr wdc_pause
+    ; skip pause for now since rendering text is so expensive
+    ;jsr wdc_pause
 
     rts
 
