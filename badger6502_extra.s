@@ -206,10 +206,6 @@ ShowStartMsg:
 ;    jsr tx_startup_message
      rts
 
-
-Backspace:
-  .byte $1B,"[D ",$1B,"[D",$00
-
 wdc_pause:
     phx
     ldx #0
@@ -760,11 +756,14 @@ console_add_char:
 
 @backspace:
 ;backspace handling
+    stz CHAR_DRAW  ; draw a blank char
     lda CURSOR_X
-    beq @storechar
-    lda #$00
-    sta CHAR_DRAW  ; draw a blank char
-    jsr draw_char
+    bne @deletechar
+    inc CURSOR_X  ; inc here since we're already at 0 and we'll dec below
+    bra @storechar
+
+@deletechar:
+    jsr draw_char ; draw over the char
     
 @storechar:
     ldy CURSOR_Y
@@ -796,8 +795,7 @@ console_add_char:
     bra @done
 
 @docr:
-    lda #$00
-    sta CHAR_DRAW
+    stz CHAR_DRAW
     stz CURSOR_X
     bra @done
 
@@ -829,64 +827,64 @@ scroll_console:
     phx
 
     ; copy from row 2-1, 3->2, etc...
-    ldy #$0
-@loopy:
-    lda eb_text_msb, y
-    sta DEST_HIGH
-    lda eb_text_lsb, y
-    sta DEST_LOW
-
-    iny
-    cpy #$19
-    beq @clearinput
-    
-    lda eb_text_msb, y
-    sta SOURCE_HIGH
-    lda eb_text_lsb, y
-    sta SOURCE_LOW
-
     ldx #$0
 @loopx:
-    ; copy from source to dest
-    lda (SOURCE_LOW)
-    sta (DEST_LOW)
+    lda eb_text_msb, x
+    sta DEST_HIGH
+    lda eb_text_lsb, x
+    sta DEST_LOW
 
-    inc SOURCE_LOW
-    bne @skipinc1
-    inc SOURCE_HIGH
-@skipinc1:
-    
-    inc DEST_LOW
-    bne @skipinc2
-    inc DEST_HIGH
-@skipinc2:
- 
     inx
-    cpx #$28
-    bne @loopx
-    bra @loopy
+    cpx #$19
+    beq @clearinput
+    
+    lda eb_text_msb, x
+    sta SOURCE_HIGH
+    lda eb_text_lsb, x
+    sta SOURCE_LOW
+
+    ldy #$0
+@loopy:
+    ; copy from source to dest
+    lda (SOURCE_LOW),y
+    sta (DEST_LOW),y
+
+;    inc SOURCE_LOW
+;    bne @skipinc1
+;    inc SOURCE_HIGH
+;@skipinc1:
+    
+;    inc DEST_LOW
+;    bne @skipinc2
+;    inc DEST_HIGH
+;@skipinc2:
+ 
+    iny
+    cpy #$28
+    bne @loopy
+    bra @loopx
 
 @clearinput:
     ; clear the last line and draw screen
-    ldx #$0
-    ldy #$18
+    ldy #$0
+    ldx #$18
 
-    lda eb_text_msb, y
+    lda eb_text_msb, x
     sta DEST_HIGH
-    lda eb_text_lsb, y
+    lda eb_text_lsb, x
     sta DEST_LOW
     lda #$00
 
 ; clear the input line
 @loopclear:
-    sta (DEST_LOW)
+    sta (DEST_LOW),y
 
-    inc DEST_LOW
-    bne @skipinc3
-    inc DEST_HIGH
-@skipinc3:
-    inx
-    cpx #$28
+    ;inc DEST_LOW
+    ;bne @skipinc3
+    ;inc DEST_HIGH
+;@skipinc3:
+    iny
+    cpy #$28
     bne @loopclear
 
 @draw:
@@ -909,32 +907,32 @@ draw_screen:
     lda CURSOR_Y
     pha
 
-    ldy #$00
-@loopy:
-    sty CURSOR_Y
-    lda eb_text_msb, y
-    sta DEST_HIGH
-    lda eb_text_lsb, y
-    sta DEST_LOW
     ldx #$00
+@loopx:
+    stx CURSOR_Y
+    lda eb_text_msb, x
+    sta DEST_HIGH
+    lda eb_text_lsb, x
+    sta DEST_LOW
+    ldy #$00
 
-@loopx: 
-    stx CURSOR_X
-    lda (DEST_LOW)
+@loopy: 
+    sty CURSOR_X
+    lda (DEST_LOW),Y
     sta CHAR_DRAW
     jsr draw_char
 
-    inc DEST_LOW
-    bne @skipinc
-    inc DEST_HIGH
-@skipinc:
-    inx
-    cpx #$28
-    bne @loopx
-
+;    inc DEST_LOW
+;    bne @skipinc
+;    inc DEST_HIGH
+;@skipinc:
     iny
-    cpy #$19
+    cpy #$28
     bne @loopy
+
+    inx
+    cpx #$19
+    bne @loopx
 
 @done:
     ; restore the cursor
@@ -950,6 +948,69 @@ draw_screen:
 
 ; DRAW CHARACTER
 draw_char:
+    pha
+    phx
+    phy
+
+
+    lda CHAR_DRAW
+    lsr
+    lsr
+    lsr
+    lsr
+    lsr
+    clc
+    adc #>font8x8
+    sta FONTPTR_H
+
+    lda CHAR_DRAW
+    asl
+    asl
+    asl
+    clc
+    adc #<font8x8
+    sta FONTPTR
+
+
+    clc
+    lda CURSOR_Y
+    asl
+    asl
+    asl
+    tay
+
+    ldx #$00
+@loopy:                  ; loop through 8 lines per char
+    lda (HIRESPAGE),y
+    sta ORIGIN_H
+    lda eb_hires_lsb,y
+
+    clc
+    adc CURSOR_X
+    bcc @skipcarry
+    inc ORIGIN_H
+@skipcarry:
+    sta ORIGIN_L
+    
+    lda (FONTPTR)
+    sta (ORIGIN_L)
+
+    inc FONTPTR
+    bne @skipcarry2
+    inc FONTPTR_H
+@skipcarry2:
+    iny
+    inx
+    cpx #$8
+    bne @loopy
+
+    ply
+    plx
+    pla
+    rts
+
+; DRAW CHARACTER
+draw_char_old:
     pha
     phx
     phy
@@ -1763,6 +1824,7 @@ font_lookup:
         .addr font8x8+$07C0,font8x8+$07C8,font8x8+$07D0,font8x8+$07D8
         .addr font8x8+$07E0,font8x8+$07E8,font8x8+$07F0,font8x8+$07F8
 
+.segment "FONT"
 font8x8:
         .byte $00,$00,$00,$00,$00,$00,$00,$00      ;  0
         .byte $7e,$81,$a5,$81,$bd,$99,$81,$7e      ;  1
@@ -2020,6 +2082,7 @@ font8x8:
         .byte $78,$0c,$18,$30,$7c,$00,$00,$00      ;  253
         .byte $00,$00,$3c,$3c,$3c,$3c,$00,$00      ;  254
         .byte $00,$00,$00,$00,$00,$00,$00,$00      ;  255
+
 ; ****************************************************************************************************************
 ;  The WOZ Monitor for the Apple 1
 ;  Written by Steve Wozniak in 1976
