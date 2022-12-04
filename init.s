@@ -252,8 +252,12 @@ L40D7:
         beq     L40FA
 .endif
 .ifdef CBM2
-; optimized version of the CBM1 code
-        bmi     L40FA
+; optimized version of the CBM1 code - modified for ebadger6502
+        lda     LINNUM+1
+        cmp     #$C0
+        beq     L40FA
+
+;        bmi     L40FA
 .endif
 .if .def(AIM65)
 ; AIM65: hard RAM top limit is $A000

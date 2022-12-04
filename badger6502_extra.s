@@ -112,11 +112,9 @@ KEYLAST   = $D3
 
 TEMP      = $D4
 
-KBBUF     = $200
-KEYSTATE  = $300
+KBBUF     = $800
+KEYSTATE  = $900
 
-
-;INPUTBUF = $300
 
 ; keyboard processing states
 PS2_START   = $00
@@ -786,6 +784,23 @@ console_add_char:
     jsr draw_char
     bra @done
 
+@dolf:
+    lda #$00
+    sta CHAR_DRAW
+    inc CURSOR_Y
+    lda CURSOR_Y
+    cmp #$19    ; line 25?  scroll
+    bne @done
+    dec CURSOR_Y
+    jsr scroll_console
+    bra @done
+
+@docr:
+    lda #$00
+    sta CHAR_DRAW
+    stz CURSOR_X
+    bra @done
+
 @draw:
     jsr draw_char
 
@@ -797,21 +812,6 @@ console_add_char:
     stz CURSOR_X
     bra @done
 
-@dolf:
-    lda #$00
-    sta CHAR_DRAW
-    inc CURSOR_Y
-    lda CURSOR_Y
-    cmp #$19    ; line 25?  scroll
-    bne @draw
-    dec CURSOR_Y
-    jsr scroll_console
-    bra @done
-@docr:
-    lda #$00
-    sta CHAR_DRAW
-    stz CURSOR_X
-    bra @done
 
 @clear:
     jsr cls
@@ -2053,9 +2053,9 @@ NOTCR:          CMP #$08 + $80  ; "\B"?
                 BPL NEXTCHAR    ; Auto ESC if > 127.
 ESCAPE:         LDA #'\'        ; "\".
                 JSR ECHO        ; Output it.
-GETLINE:        LDA #$8D        ; CR.
+GETLINE:        LDA #$0D        ; CR.
                 JSR ECHO        ; Output it.
-                LDA #$8A        ; LF.
+                LDA #$0A        ; LF.
                 JSR ECHO        ; Output it.
                 LDY #$01        ; Initialize text index.
 BACKSPACE:      DEY             ; Back up text index.

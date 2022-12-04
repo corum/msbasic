@@ -28,7 +28,7 @@ TXPSV			:= LASTOP
 USR				:= GORESTART ; XXX
 
 ; inputbuffer
-INPUTBUFFER     := $0200
+INPUTBUFFER     := $200
 
 ; constants
 SPACE_FOR_GOSUB := $3E
@@ -36,7 +36,7 @@ STACK_TOP		:= $FA
 WIDTH			:= 40
 WIDTH2			:= 30
 
-RAMSTART2		:= $0800
+RAMSTART2		:= $1000
 
 ; magic memory locations
 ENTROPY = $7000
