@@ -79,10 +79,10 @@ CURSOR_ADDR_H  = $C3
 CHAR_DRAW      = $C4
 
 ;ROMDISK
-RD_LOW  = $C030
-RD_HIGH = $C031
-RD_BANK = $C032
-RD_DATA = $C033
+RD_LOW  = $C040
+RD_HIGH = $C041
+RD_BANK = $C042
+RD_DATA = $C043
 
 ;ROMDISK VARIABLES
 
@@ -208,13 +208,14 @@ ShowStartMsg:
 
 wdc_pause:
     phx
-    ldx #0
+    ldx #$B0
 
 @wdc_pause_loop1:
     inx
     cpx #$00
     bne @wdc_pause_loop1
 
+    ldx #$B0
 @wdc_pause_loop2:
     inx
     cpx #$00
@@ -237,7 +238,7 @@ tx_char_sync:
     
     ; workaround for WDC chip
     ; skip pause for now since rendering text is so expensive
-    ;jsr wdc_pause
+    jsr wdc_pause
 
     rts
 
@@ -761,7 +762,7 @@ console_add_char:
     bra @storechar
 
 @deletechar:
-    jsr draw_char ; draw over the char
+    ;jsr draw_char ; draw over the char
     
 @storechar:
     ldy CURSOR_Y
@@ -778,7 +779,7 @@ console_add_char:
     ; if 0 char, skip to done
     bne @draw
     dec CURSOR_X
-    jsr draw_char
+    ;jsr draw_char    ; disable for text mode
     bra @done
 
 @dolf:
@@ -798,7 +799,7 @@ console_add_char:
     bra @done
 
 @draw:
-    jsr draw_char
+    ;jsr draw_char
 
 @advance:
     inc CURSOR_X
@@ -886,7 +887,7 @@ scroll_console:
     bne @loopclear
 
 @draw:
-    jsr draw_screen
+    ;jsr draw_screen
 
     plx
     ply
