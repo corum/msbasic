@@ -282,14 +282,14 @@ tx_char_sync:
 ; Keyboard
 ;==========================================================================
 
-;read_char_async_apple:
-;    lda KBCURR
-;    cmp #$00
-;    beq @exit
-;    jsr read_char
-;    ora #$80
-;@exit:
-;    rts
+read_char_async_apple:
+    lda KBCURR
+    cmp #$00
+    beq @exit
+    jsr read_char
+    ora #$80
+@exit:
+    rts
 
 read_char_async:
     lda KBCURR
