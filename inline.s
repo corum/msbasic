@@ -60,6 +60,14 @@ INLINAIM:
     .endif
         cmp     #$0D
         beq     L2453
+.ifdef BADGER6502
+        cmp     #$08
+        bne     @EB_SKIP_BACKSPACE
+        stz     INPUTBUFFER, X
+        dex
+        bra     @EB_SKIP_APPEND 
+.endif
+
     .ifndef CONFIG_NO_LINE_EDITING
         cmp     #$20
       .ifdef AIM65
@@ -97,8 +105,10 @@ L2443:
       .endif
         bcs     L244C
     .endif
+@EB_SKIP_BACKSPACE:
         sta     INPUTBUFFER,x
-        inx
+        inx        
+@EB_SKIP_APPEND:
     .if .def(OSI) || .def(AIM65)
         .byte   $2C
     .else

@@ -787,6 +787,7 @@ console_add_char:
     bra @storechar
 
 @deletechar:
+    dec CURSOR_X
     ;jsr draw_char ; draw over the char
     
 @storechar:
@@ -803,7 +804,7 @@ console_add_char:
 
     ; if 0 char, skip to done
     bne @draw
-    dec CURSOR_X
+    ;dec CURSOR_X
     ;jsr draw_char    ; disable for text mode
     bra @done
 
