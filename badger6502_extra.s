@@ -306,6 +306,7 @@ read_char_upper:
    bit KEYTEMP
    bvc @exit
    and #$DF
+   sta KEYTEMP
 @exit:
    ora #$80
    rts
