@@ -12,7 +12,10 @@
         jmp     PR_WRITTEN_BY
 .endif
 .ifdef BADGER6502
-        jmp     COLD_START
-        jmp     RESTART
-        jmp     _cls
+        jmp     COLD_START                ;$C100
+        jmp     RESTART                   ;$C103
+        jmp     _cls                      ;$C106
+        jmp     _loderunner               ;$C109
+        jmp     read_char_async_apple     ;$C10C
+        jmp     romdisk_load              ;$C10F
 .endif

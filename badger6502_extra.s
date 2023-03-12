@@ -5,8 +5,6 @@
 ;0xC100 0xE2FF Basic ROM
 ;0xE300 0xFFFF OS
 
- 
-
 .segment "CODE"
 
 ;ACIA C0
@@ -79,48 +77,44 @@ CURSOR_ADDR_H  = $C3
 CHAR_DRAW      = $C4
 
 ;ROMDISK
-RD_LOW  = $C040
-RD_HIGH = $C041
-RD_BANK = $C042
-RD_DATA = $C043
+RD_LOW         = $C040
+RD_HIGH        = $C041
+RD_BANK        = $C042
+RD_DATA        = $C043
 
 ;ROMDISK VARIABLES
 
-SOURCE_LOW  = $BC
-SOURCE_HIGH = $BD
+SOURCE_LOW     = $BC
+SOURCE_HIGH    = $BD
 
-RD_BYTES_LOW  = $BE
-RD_BYTES_HIGH = $BF
+RD_BYTES_LOW   = $BE
+RD_BYTES_HIGH  = $BF
 
-DEST_LOW   = $C5
-DEST_HIGH  = $C6
-
-
-
+DEST_LOW       = $C5
+DEST_HIGH      = $C6
 
 ; PS/2 keyboard memory locations
-KBSTATE   = $CA
-KBTEMP    = $CB
-KBCURR    = $CC 
-KBBIT     = $CD
-KBEXTEND  = $CE
-KBKEYUP   = $CF
-KBDBG     = $D0
-KBDBG2    = $D1
-KEYTEMP   = $D2
-KEYLAST   = $D3
+KBSTATE        = $CA
+KBTEMP         = $CB
+KBCURR         = $CC 
+KBBIT          = $CD
+KBEXTEND       = $CE
+KBKEYUP        = $CF
+KBDBG          = $D0
+KBDBG2         = $D1
+KEYTEMP        = $D2
+KEYLAST        = $D3
+TEMP           = $D4
 
-TEMP      = $D4
-
-KBBUF     = $800
-KEYSTATE  = $900
+KBBUF          = $380
+KEYSTATE       = $300
 
 
 ; keyboard processing states
-PS2_START   = $00
-PS2_KEYS    = $01
-PS2_PARITY  = $02
-PS2_STOP    = $03
+PS2_START      = $00
+PS2_KEYS       = $01
+PS2_PARITY     = $02
+PS2_STOP       = $03
 
 .segment "OS"
 ;CODE
@@ -128,8 +122,6 @@ init:
     sei
     cld
     
-    sta $C03E ; set graphics mode 1
-
     ldx #STACK_TOP
     txs
 
@@ -149,8 +141,6 @@ init:
     ;lda #$00      ; 1 stop bits, 8 bit word length, external clock, 16x baud rate
     lda #$1F       ; 1 stop bits, 8 bit word length, internal clock, 19.2k baud rate
     sta A_CTL      ; program the ctl register
-
-
 
 ; init PS/2 kb stuff
     lda #$00
@@ -191,8 +181,9 @@ init:
     sta SCREEN_L
     jsr set_hires_page1
 
-    ;jsr cls
-    
+    ; put machine into text mode with default font 
+    stz $C043
+    jsr cls
     cli
 
     lda #$9B
@@ -278,6 +269,26 @@ tx_char_sync:
 ;    pla
 ;    rts
 
+; loderunner
+_loderunner:
+    lda #2
+    sta DEST_HIGH
+    sta SOURCE_HIGH
+
+    stz DEST_LOW
+    stz SOURCE_LOW
+    stz RD_BYTES_LOW
+
+    lda #$BE
+    sta RD_BYTES_HIGH
+
+    stz RD_LOW
+    stz RD_HIGH
+    stz RD_BANK
+
+    jsr romdisk_load
+    jmp $6000
+
 ;==========================================================================
 ; Keyboard
 ;==========================================================================
@@ -286,10 +297,18 @@ read_char_async_apple:
     lda KBCURR
     cmp #$00
     beq @exit
-    jsr read_char
-    ora #$80
+    jsr read_char_upper
 @exit:
     rts
+
+read_char_upper:
+   jsr read_char
+   bit KEYTEMP
+   bvc @exit
+   and #$DF
+@exit:
+   ora #$80
+   rts
 
 read_char_async:
     lda KBCURR
@@ -301,6 +320,12 @@ read_char_async:
 
 read_char_echo:
     jsr read_char
+    jsr display_char
+    rts
+
+read_char_upper_echo:
+    jsr read_char_upper
+    and #$7F
     jsr display_char
     rts
 
@@ -1229,7 +1254,6 @@ romdisk_load:
     ; ramdisk copy will set RAMDISK address based on RD_SOURCE and start copying to RD_DEST from whatever RD_BANK is set
 
     pha
-
 @loop:
     ldx RD_BYTES_LOW
     cpx #$00
@@ -1988,8 +2012,7 @@ GETLINE:        LDA #$0D        ; CR.
                 LDY #$01        ; Initialize text index.
 BACKSPACE:      DEY             ; Back up text index.
                 BMI GETLINE     ; Beyond start of line, reinitialize.
-NEXTCHAR:       jsr read_char   ; Key ready?
-                ora #$80
+NEXTCHAR:       jsr read_char_upper   ; Key ready?
                 STA IN,Y        ; Add to text buffer.
                 JSR ECHO        ; Display character.
                 CMP #$8D        ; CR?

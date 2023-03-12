@@ -42,7 +42,7 @@ RAMSTART2		:= $1000
 ENTROPY = $7000
 
 ; monitor functions
-MONRDKEY        := read_char_echo
+MONRDKEY        := read_char_upper_echo
 MONCOUT         := display_char
 ;CHKIN           := do_nothing
 ;CHKOUT          := do_nothing
@@ -56,5 +56,5 @@ VERIFY          := do_nothing
 ;LE7F3           := do_nothing
 LOAD            := do_nothing
 SAVE            := do_nothing
-;L2420           := do_nothing
-;L2423           := do_nothing
+L2420           := display_char
+L2423           := display_char
