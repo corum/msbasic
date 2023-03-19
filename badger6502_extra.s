@@ -105,6 +105,7 @@ KBDBG2         = $D1
 KEYTEMP        = $D2
 KEYLAST        = $D3
 TEMP           = $D4
+RES            = $D4
 
 KBBUF          = $380
 KEYSTATE       = $300
@@ -197,6 +198,26 @@ ShowStartMsg:
 ;    jsr tx_startup_message
      rts
 
+MSG_SYNATAXERROR:
+    .byte "SYNTAX ERROR"
+    .byte CR, LF, 0
+
+MSG_FILENOTFOUND:
+    .byte "FILE NOT FOUND"
+    .byte CR, LF, 0
+
+MSG_FILE_ERROR:
+    .byte "FILE ERROR"
+    .byte CR, LF, 0
+
+MSG_LOAD:
+    .byte "LOADED"
+    .byte CR, LF, 0
+
+MSG_SAVE:
+    .byte "SAVED"
+    .byte CR, LF, 0
+
 wdc_pause:
     phx
     ldx #$B0
@@ -268,6 +289,55 @@ tx_char_sync:
 ;    plx
 ;    pla
 ;    rts
+
+eb_load:
+    pha
+    sta     $C0F1    ; load
+    lda     $C0FF    ; get status value
+    beq     @success
+
+    cmp     #2
+    bne     @foundfile
+
+    lda     #<MSG_FILENOTFOUND
+    ldy     #>MSG_FILENOTFOUND
+    jsr     STROUT
+
+@foundfile:
+    lda     #<MSG_FILE_ERROR
+    ldy     #>MSG_FILE_ERROR
+    jsr     STROUT
+    bra     @exit
+
+@success:
+    lda     #<MSG_LOAD
+    ldy     #>MSG_LOAD
+    jsr     STROUT
+
+@exit:
+    pla
+    rts
+
+eb_save:
+    pha
+    sta     $C0F0   ; save 
+    lda     $C0FF   ; get status value
+    
+    beq     @success
+
+    lda     #<MSG_FILE_ERROR
+    ldy     #>MSG_FILE_ERROR
+    jsr     STROUT
+    bra     @exit
+
+@success:
+    lda     #<MSG_SAVE
+    ldy     #>MSG_SAVE
+    jsr     STROUT
+
+@exit:
+    pla
+    rts
 
 ; loderunner
 _loderunner:
