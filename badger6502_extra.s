@@ -200,23 +200,23 @@ ShowStartMsg:
 
 MSG_SYNATAXERROR:
     .byte "SYNTAX ERROR"
-    .byte CR, LF, 0
+    .byte CR,LF,CR,LF,0
 
 MSG_FILENOTFOUND:
     .byte "FILE NOT FOUND"
-    .byte CR, LF, 0
+    .byte CR,LF,CR,LF,0
 
 MSG_FILE_ERROR:
     .byte "FILE ERROR"
-    .byte CR, LF, 0
+    .byte CR,LF,CR,LF,0
 
 MSG_LOAD:
     .byte "LOADED"
-    .byte CR, LF, 0
+    .byte CR,LF,CR,LF,0
 
 MSG_SAVE:
     .byte "SAVED"
-    .byte CR, LF, 0
+    .byte CR,LF,CR,LF,0
 
 wdc_pause:
     phx
@@ -316,7 +316,7 @@ eb_load:
 
 @exit:
     pla
-    rts
+    jmp     FIX_LINKS
 
 eb_save:
     pha
@@ -337,7 +337,7 @@ eb_save:
 
 @exit:
     pla
-    rts
+    jmp     FIX_LINKS
 
 ; loderunner
 _loderunner:
