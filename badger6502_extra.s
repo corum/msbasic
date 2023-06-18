@@ -34,6 +34,13 @@ IMASK  = %10000011 ; enable interrupt for CA1
 CFGCA  = %00000010  ; configure CA2 for negative active edge for PS/2 clock
 ACRCFG = %00000011  ; enable latching
 
+;SD card pins
+SD_CS   = %00010000
+SD_SCK  = %00001000
+SD_MOSI = %00000100
+SD_MISO = %00000010
+
+PORTA_OUTPUTPINS = %11100000 | SD_CS | SD_SCK | SD_MOSI
 
 ;CONSOLE
 CURSOR_X       = $A5
@@ -75,6 +82,7 @@ TEXT           = $0400
 CURSOR_ADDR    = $C2
 CURSOR_ADDR_H  = $C3
 CHAR_DRAW      = $C4
+MSG_ADDR       = $C5 ; 2 bytes
 
 ;ROMDISK
 RD_LOW         = $C040
@@ -118,6 +126,8 @@ PS2_PARITY     = $02
 PS2_STOP       = $03
 
 .segment "OS"
+.include "libfat32.s"
+
 ;CODE
 init:
     sei
@@ -163,17 +173,7 @@ init:
     bne @clrbufx
 
 
-    lda #%00000000 ; configure all VIA1 A pins for input
-    sta DDRA
-
-    lda #CFGCA
-    sta PCR        ; configure CA2 for negative edge independent interrupt, for PS/2
-
-    ;lda #ACRCFG
-    ;sta ACR        ; enable latching
-
-    lda #$83
-    sta IER        ; enable interrupts for CA1 and CA2
+    jsr via_init
     
     ; set graphics page
     lda #$20
@@ -185,12 +185,49 @@ init:
     ; put machine into text mode with default font 
     stz $C043
     jsr cls
+
+    jsr display_message
+    .byte "Initializing SD card"
+    .byte 10,13,0
+
+    jsr sd_init
+    jsr fat32_init
+
+    bcc @sdinitsuccess
+
+    jsr display_message
+    .byte "SD card init failed"
+    .byte 10,13,0
+
+    lda fat32_errorstage
+    jsr print_hex
+
+@sdinitsuccess:
+    jsr display_message
+    .byte "SD card intialization succeeded"
+    .byte 10,13,0
+
     cli
 
     lda #$9B
 @loop:
     jsr WOZMON
     jmp @loop
+
+
+via_init:
+    lda #%11111111          ; Set all pins on port B to output
+    sta DDRB
+
+    lda #PORTA_OUTPUTPINS   ; Set various pins on port A to output
+    sta DDRA
+
+    lda #CFGCA
+    sta PCR        ; configure CA2 for negative edge independent interrupt, for PS/2
+
+    lda #$83
+    sta IER        ; enable interrupts for CA1 and CA2
+    rts
 
 
 ; Display startup message
@@ -432,6 +469,7 @@ read_char:
 
 ; DISPLAY 
 
+print_char:
 display_char:
     jsr tx_char_sync    
     jsr console_add_char
@@ -439,6 +477,60 @@ display_char:
 @done: 
     rts
 
+display_message:
+    pla
+    sta	MSG_ADDR
+    pla
+    sta	MSG_ADDR+1          ; get return address off the stack
+    bne	@increturn
+
+@nextchar:
+    ldy	#0
+    lda	(MSG_ADDR),Y		; next message character
+    beq	@pushreturnaddr		; done?	yes, exit
+    jsr	display_char
+
+@increturn:					; next address
+    inc	MSG_ADDR
+    bne	@nextchar
+    inc	MSG_ADDR+1	   	    ; fix MSB of next address
+    bne	@nextchar
+
+@pushreturnaddr:
+    lda	MSG_ADDR+1
+    pha
+    lda	MSG_ADDR
+    pha				; adjust return	address
+    rts
+
+print_space:
+    pha
+    lda #' '
+    jsr print_char
+    pla
+    rts
+    
+print_hex:
+    pha
+    ror
+    ror
+    ror
+    ror
+    jsr print_nybble
+    pla
+    pha
+    jsr print_nybble
+    pla
+    rts
+print_nybble:
+    and #15
+    cmp #10
+    bmi @skipletter
+    adc #6
+@skipletter:
+    adc #48
+    jsr print_char
+    rts
 
 wozlong:
     jmp $FF00
