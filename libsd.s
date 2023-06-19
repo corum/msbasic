@@ -191,8 +191,7 @@ sd_sendcommand:
   ;lda #'c'
   ;jsr print_char
   jsr display_message
-  .byte "Sending command bytes: "
-  .byte 0
+  .byte "CMD: ", 0
 
   lda #SD_MOSI           ; pull CS low to begin command
   sta PORTA
@@ -220,12 +219,13 @@ sd_sendcommand:
   pha
 
   jsr display_message
-  .byte 10,13
-  .byte "Result Code: "
-  .byte 10,13,0
+  .byte "{", 0
 
   ; Debug print the result code
   jsr print_hex
+
+  jsr display_message
+  .byte "}", 10, 13, 0
 
   ; End command
   lda #SD_CS | SD_MOSI   ; set CS high again
@@ -245,6 +245,9 @@ sd_readsector:
   lda #SD_MOSI
   sta PORTA
 
+  jsr display_message
+  .byte "READ: ", 0
+
   ; Command 17, arg is sector number, crc not checked
   lda #$51                    ; CMD17 - READ_SINGLE_BLOCK
   jsr sd_writebyte
@@ -258,6 +261,9 @@ sd_readsector:
   jsr sd_writebyte
   lda #$01                    ; crc (not checked)
   jsr sd_writebyte
+
+  jsr display_message
+  .byte 10,13,0
 
   jsr sd_waitresult
   cmp #$00
@@ -277,18 +283,14 @@ sd_readsector:
   ; End command
   lda #SD_CS | SD_MOSI
   sta PORTA
-
   rts
-
 
 @fail:
   jsr display_message
-  .byte "Read Sector Failed"
-  .byte 10,13,0
+  .byte "Read Sector Failed", 10, 13, 0
 ;@failloop:
 ;  jmp @failloop
   rts
-
 
 @readpage:
   ; Read 256 bytes to the address at zp_sd_address

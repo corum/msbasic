@@ -55,8 +55,7 @@ fat32_init:
   jsr sd_readsector
 
   jsr display_message
-  .byte "Checking boot sector signature"
-  .byte 10,13,0
+  .byte "Checking boot sector signature", 10, 13, 0
 
   inc fat32_errorstage ; stage 1 = boot sector signature check
 
@@ -72,8 +71,7 @@ fat32_init:
   inc fat32_errorstage ; stage 2 = finding partition
 
   jsr display_message
-  .byte "Finding FAT partition"
-  .byte 10,13,0
+  .byte "Finding FAT partition", 10, 13, 0
 
   ; Find a FAT32 partition
   ldx #0
@@ -651,6 +649,113 @@ fat32_file_read:
 @done:
   rts
 
+fat32_root_dir:
+    jsr display_message
+    .byte "Initializing SD card"
+    .byte 10,13,0
+
+    jsr sd_init
+    jsr fat32_init
+
+    bcc @sdinitsuccess
+
+    jsr display_message
+    .byte "SD card init failed"
+    .byte 10,13,0
+
+    lda fat32_errorstage
+    jsr print_hex
+    rts
+
+@sdinitsuccess:
+    jsr display_message
+    .byte "SD card intialization succeeded"
+    .byte 10,13,0
+
+  jsr fat32_openroot
+  jsr fat32_dir
+  rts
+
+; parse a FAT32 directory entry and output
+fat32_dir:
+  phy
+  phx
+
+@start:
+  jsr fat32_readdirent
+  bcs @done
+
+  ; structure of a directory entry - pointed to by zp_sd_address
+  ; $00 11 bytes filename
+  ; $0B 1 byte attributes
+  ;      $01: read only
+  ;      $02: hidden
+  ;      $04: system
+  ;      $08: volume label
+  ;      $10: directory
+  ;      $20: archive
+  ; $0C 1 byte reserved
+  ; $0D 5 bytes creation time
+  ; $12 2 bytes access date
+  ; $14 2 bytes high-order bytes of first cluster address (always 0 in FAT 16, only used in FAT32)
+  ; $16 4 bytes written date time
+  ; $1A 2 bytes low-order bytes of the first cluster address
+  ; $1C 4 bytes file size ( 0 for directories)
+  
+  ldy #$00
+
+  ; A contains attributes
+  and #$10
+  tax           ; stash file attributes in x
+  beq @notadir
+  jsr display_message
+  .byte "<DIR> ", 0
+  bra @loopfilename
+@notadir:
+  jsr display_message
+  .byte "      ", 0
+
+@loopfilename:
+  lda (zp_sd_address), y
+  jsr print_char
+
+  cpy #$7
+  bne @nodot
+  
+  jsr print_space
+
+@nodot:
+  iny
+  cpy #$B
+  bne @loopfilename
+
+  txa
+  and #$10
+  bne @start 
+
+  jsr display_message
+  .byte "      ", 0
+
+; get the file size
+  ldy #$1F
+@filesizeloop:
+  lda (zp_sd_address), y
+  jsr print_hex
+  dey
+  cpy #$1B
+  bne @filesizeloop
+
+  jsr display_message
+  .byte 10, 13, 0
+ 
+  bra @start
+  
+@done:
+
+  plx
+  ply
+
+  rts
 
 ;
 
@@ -669,15 +774,13 @@ dump_file:
 
   ; File not found:
   jsr display_message
-  .byte "File Not Found"
-  .byte 10,13,0
+  .byte 10,13,"File Not Found", 10, 13, 0
   rts
 
 @foundfile:
  
    jsr display_message
-  .byte "File found opening"
-  .byte 10,13,0
+  .byte 10,13,"File found opening", 10, 13, 0
 
   ; Open file
   jsr fat32_opendirent

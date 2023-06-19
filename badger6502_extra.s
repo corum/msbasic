@@ -186,27 +186,6 @@ init:
     stz $C043
     jsr cls
 
-    jsr display_message
-    .byte "Initializing SD card"
-    .byte 10,13,0
-
-    jsr sd_init
-    jsr fat32_init
-
-    bcc @sdinitsuccess
-
-    jsr display_message
-    .byte "SD card init failed"
-    .byte 10,13,0
-
-    lda fat32_errorstage
-    jsr print_hex
-
-@sdinitsuccess:
-    jsr display_message
-    .byte "SD card intialization succeeded"
-    .byte 10,13,0
-
     cli
 
     lda #$9B
