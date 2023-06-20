@@ -77,6 +77,14 @@ YT             = $BF   ; y temp
 FONTPTR        = $C0
 FONTPTR_H      = $C1
 
+; starting of 512 byte buffer used by fat32
+fat32_workspace     = $900
+fat32_filename      = $BF0
+fat32_destaddr_low  = $BFE
+fat32_destaddr_high = $BFF
+
+; DOS addresses
+dos_command        = $BC0
 ; TEXT MODE
 TEXT           = $0400
 CURSOR_ADDR    = $C2
@@ -127,6 +135,7 @@ PS2_STOP       = $03
 
 .segment "OS"
 .include "libfat32.s"
+.include "dos.s"
 
 ;CODE
 init:
@@ -480,6 +489,15 @@ display_message:
     pha
     lda	MSG_ADDR
     pha				; adjust return	address
+    rts
+
+print_crlf:
+    pha
+    lda #10
+    jsr print_char
+    lda #13
+    jsr print_char
+    pla
     rts
 
 print_space:

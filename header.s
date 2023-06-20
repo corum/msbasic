@@ -18,5 +18,6 @@
         jmp     _loderunner               ;$C109
         jmp     read_char_async_apple     ;$C10C
         jmp     romdisk_load              ;$C10F
-        jmp     fat32_root_dir            ;$C112
+        jmp     fat32_load_file           ;$C112
+        jmp     dos                       ;$C115
 .endif

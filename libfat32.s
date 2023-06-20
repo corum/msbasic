@@ -6,17 +6,16 @@
 ; zp_fat32_variables - 24 bytes of zero-page storage for variables etc
 
 
-zp_fat32_variables = $50
+zp_fat32_variables = $30
 
-fat32_workspace    = $A00
 fat32_readbuffer   = fat32_workspace
 
 fat32_fatstart          = zp_fat32_variables + $00  ; 4 bytes
 fat32_datastart         = zp_fat32_variables + $04  ; 4 bytes
 fat32_rootcluster       = zp_fat32_variables + $08  ; 4 bytes
-fat32_sectorspercluster = zp_fat32_variables + $0c  ; 1 byte
-fat32_pendingsectors    = zp_fat32_variables + $0d  ; 1 byte
-fat32_address           = zp_fat32_variables + $0e  ; 2 bytes
+fat32_sectorspercluster = zp_fat32_variables + $0C  ; 1 byte
+fat32_pendingsectors    = zp_fat32_variables + $0D  ; 1 byte
+fat32_address           = zp_fat32_variables + $0E  ; 2 bytes
 fat32_nextcluster       = zp_fat32_variables + $10  ; 4 bytes
 fat32_bytesremaining    = zp_fat32_variables + $14  ; 4 bytes 
 zp_sd_address           = zp_fat32_variables + $18  ; 2 bytes
@@ -109,8 +108,7 @@ fat32_init:
   jsr sd_readsector
 
   jsr display_message
-  .byte "Reading Fat32 BPB"
-  .byte 10,13,0
+  .byte "Reading Fat32 BPB", 10, 13, 0
 
   inc fat32_errorstage ; stage 3 = BPB signature check
 
@@ -123,8 +121,7 @@ fat32_init:
   bne @fail
 
   jsr display_message
-  .byte "Reading RootEntCnt"
-  .byte 10,13,0
+  .byte "Reading RootEntCnt", 10, 13, 0
 
   inc fat32_errorstage ; stage 4 = RootEntCnt check
 
@@ -148,8 +145,7 @@ fat32_init:
   bne @fail
 
   jsr display_message
-  .byte "Calculating starting FAT sector"
-  .byte 10,13,0
+  .byte "Calculating starting FAT sector", 10, 13, 0
 
   ; Calculate the starting sector of the FAT
   clc
@@ -538,8 +534,13 @@ fat32_finddirent:
 
 @comparenameloop:
   lda (zp_sd_address),y
+  bne @skip ; if it's null
+  cmp #$20  ; or if it's a space
+  beq @skip
+
   cmp (fat32_filenamepointer),y
   bne @direntloop ; no match
+@skip: 
   dey
   bpl @comparenameloop
 
@@ -649,19 +650,18 @@ fat32_file_read:
 @done:
   rts
 
-fat32_root_dir:
+fat32_start:
     jsr display_message
-    .byte "Initializing SD card"
-    .byte 10,13,0
+    .byte 10,13, "Initializing SD card", 10, 13, 0
 
     jsr sd_init
     jsr fat32_init
-
+    jsr fat32_openroot
+    
     bcc @sdinitsuccess
 
     jsr display_message
-    .byte "SD card init failed"
-    .byte 10,13,0
+    .byte "SD card init failed", 10,13,0
 
     lda fat32_errorstage
     jsr print_hex
@@ -669,17 +669,16 @@ fat32_root_dir:
 
 @sdinitsuccess:
     jsr display_message
-    .byte "SD card intialization succeeded"
-    .byte 10,13,0
+    .byte "SD card intialization succeeded", 10,13,0
 
-  jsr fat32_openroot
-  jsr fat32_dir
-  rts
+    jsr fat32_openroot
+    rts
 
 ; parse a FAT32 directory entry and output
 fat32_dir:
-  phy
+  pha
   phx
+  phy
 
 @start:
   jsr fat32_readdirent
@@ -710,6 +709,7 @@ fat32_dir:
   beq @notadir
   jsr display_message
   .byte "<DIR> ", 0
+
   bra @loopfilename
 @notadir:
   jsr display_message
@@ -745,30 +745,26 @@ fat32_dir:
   cpy #$1B
   bne @filesizeloop
 
-  jsr display_message
-  .byte 10, 13, 0
+  jsr print_crlf
  
   bra @start
   
 @done:
 
-  plx
   ply
-
+  plx
+  pla
   rts
 
 ;
-
-filename:
-  .asciiz "TESTFILETXT"
 
 dump_file:
   ; Open root directory
   jsr fat32_openroot
 
   ; Find file by name
-  ldx #<filename
-  ldy #>filename
+  ldx #<fat32_filename
+  ldy #>fat32_filename
   jsr fat32_finddirent
   bcc @foundfile
 
@@ -794,3 +790,37 @@ dump_file:
   jsr fat32_file_read
 
 rts
+
+; open file and read contents into RAM
+; reuse the RamDisk variables
+; fat32_filename      = $BF0
+
+fat32_load_file:
+  ; Open root directory
+  jsr fat32_openroot
+
+  ; Find file by name
+  ldx #<fat32_filename
+  ldy #>fat32_filename
+  jsr fat32_finddirent
+  bcc @foundfile
+
+  ; File not found:
+  jsr display_message
+  .byte 10,13,"File Not Found", 10, 13, 0
+  rts
+
+@foundfile:
+ 
+   jsr display_message
+  .byte 10,13,"File found opening", 10, 13, 0
+
+  ; Open file
+  jsr fat32_opendirent
+
+  ; address to write to in fat32_address and fat32_address+1
+  ; Read file contents into buffer
+  jsr fat32_file_read
+
+rts
+
