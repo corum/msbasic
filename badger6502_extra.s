@@ -90,7 +90,6 @@ TEXT           = $0400
 CURSOR_ADDR    = $C2
 CURSOR_ADDR_H  = $C3
 CHAR_DRAW      = $C4
-MSG_ADDR       = $C5 ; 2 bytes
 
 ;ROMDISK
 RD_LOW         = $C040
@@ -108,6 +107,9 @@ RD_BYTES_HIGH  = $BF
 
 DEST_LOW       = $C5
 DEST_HIGH      = $C6
+
+MSG_ADDR_LOW   = $C7
+MSG_ADDR_HIGH  = $C8
 
 ; PS/2 keyboard memory locations
 KBSTATE        = $CA
@@ -467,27 +469,27 @@ display_char:
 
 display_message:
     pla
-    sta	MSG_ADDR
+    sta	MSG_ADDR_LOW
     pla
-    sta	MSG_ADDR+1          ; get return address off the stack
+    sta	MSG_ADDR_HIGH          ; get return address off the stack
     bne	@increturn
 
 @nextchar:
     ldy	#0
-    lda	(MSG_ADDR),Y		; next message character
+    lda	(MSG_ADDR_LOW),Y		; next message character
     beq	@pushreturnaddr		; done?	yes, exit
     jsr	display_char
 
 @increturn:					; next address
-    inc	MSG_ADDR
+    inc	MSG_ADDR_LOW
     bne	@nextchar
-    inc	MSG_ADDR+1	   	    ; fix MSB of next address
+    inc	MSG_ADDR_HIGH	   	    ; fix MSB of next address
     bne	@nextchar
 
 @pushreturnaddr:
-    lda	MSG_ADDR+1
+    lda	MSG_ADDR_HIGH
     pha
-    lda	MSG_ADDR
+    lda	MSG_ADDR_LOW
     pha				; adjust return	address
     rts
 

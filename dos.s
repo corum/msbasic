@@ -50,11 +50,12 @@ process_command:
 cmd_echo:
     jsr print_crlf
 
+@echoloop:
     inx
     lda dos_command, X
     beq newprompt
     jsr display_char
-    bra cmd_echo
+    bra @echoloop
 
 cmd_exit:
     jsr display_message
@@ -88,28 +89,28 @@ match_command:
     ldx #0
     ldy	#0
     pla
-    sta	MSG_ADDR
+    sta	MSG_ADDR_LOW
     pla
-    sta	MSG_ADDR+1          ; get return address off the stack
+    sta	MSG_ADDR_HIGH          ; get return address off the stack
     bne	@increturn
 
 @nextchar:
-    lda	(MSG_ADDR),Y		; next message character    
+    lda	(MSG_ADDR_LOW),Y		; next message character    
     beq	@pushreturnaddr		; done?	yes, exit
     jsr	match_char
     bne @increturn          ; doesn't match, exit
     inx
 
 @increturn:					; next address
-    inc	MSG_ADDR
+    inc	MSG_ADDR_LOW
     bne	@nextchar
-    inc	MSG_ADDR+1	   	    ; fix MSB of next address
+    inc	MSG_ADDR_HIGH	   	    ; fix MSB of next address
     bne	@nextchar
 
 @pushreturnaddr:
-    lda	MSG_ADDR+1
+    lda	MSG_ADDR_HIGH
     pha
-    lda	MSG_ADDR
+    lda	MSG_ADDR_LOW
     pha				; adjust return	address
     rts
 
