@@ -20,6 +20,7 @@ fat32_nextcluster       = zp_fat32_variables + $10  ; 4 bytes
 fat32_bytesremaining    = zp_fat32_variables + $14  ; 4 bytes 
 zp_sd_address           = zp_fat32_variables + $18  ; 2 bytes
 zp_sd_currentsector     = zp_fat32_variables + $1A  ; 4 bytes
+zp_sd_cdcluster         = zp_fat32_variables + $1E  ; 4 bytes
 
 fat32_errorstage        = fat32_bytesremaining  ; only used during initializatio
 fat32_filenamepointer   = fat32_bytesremaining  ; only used when searching for a file
@@ -398,14 +399,22 @@ fat32_readnextsector:
 fat32_openroot:
   ; Prepare to read the root directory
 
+
   lda fat32_rootcluster
   sta fat32_nextcluster
+  sta zp_sd_cdcluster
+
   lda fat32_rootcluster+1
   sta fat32_nextcluster+1
+  sta zp_sd_cdcluster+1
+
   lda fat32_rootcluster+2
   sta fat32_nextcluster+2
+  sta zp_sd_cdcluster+2
+
   lda fat32_rootcluster+3
   sta fat32_nextcluster+3
+  sta zp_sd_cdcluster+3
 
   jsr fat32_seekcluster
 
@@ -439,15 +448,19 @@ fat32_opendirent:
   ldy #26
   lda (zp_sd_address),y
   sta fat32_nextcluster
+  sta zp_sd_cdcluster
   iny
   lda (zp_sd_address),y
   sta fat32_nextcluster+1
+  sta zp_sd_cdcluster+1
   ldy #20
   lda (zp_sd_address),y
   sta fat32_nextcluster+2
+  sta zp_sd_cdcluster+2
   iny
   lda (zp_sd_address),y
   sta fat32_nextcluster+3
+  sta zp_sd_cdcluster+3
 
   jsr fat32_seekcluster
 
@@ -545,6 +558,8 @@ fat32_finddirent:
   bpl @comparenameloop
 
   ; Found it
+
+  jsr fat32_opendirent
   clc
   rts
 
@@ -651,35 +666,55 @@ fat32_file_read:
   rts
 
 fat32_start:
-    jsr display_message
-    .byte 10,13, "Initializing SD card", 10, 13, 0
+  jsr display_message
+  .byte 10,13, "Initializing SD card", 10, 13, 0
 
-    jsr sd_init
-    jsr fat32_init
-    jsr fat32_openroot
-    
-    bcc @sdinitsuccess
+  jsr sd_init
+  jsr fat32_init
+  
+  bcc @sdinitsuccess
 
-    jsr display_message
-    .byte "SD card init failed", 10,13,0
+  jsr display_message
+  .byte "SD card init failed", 10,13,0
 
-    lda fat32_errorstage
-    jsr print_hex
-    rts
+  lda fat32_errorstage
+  jsr print_hex
+  rts
 
 @sdinitsuccess:
-    jsr display_message
-    .byte "SD card intialization succeeded", 10,13,0
+  jsr display_message
+  .byte "SD card intialization succeeded", 10,13,0
+  jsr fat32_openroot
+  rts
 
-    jsr fat32_openroot
-    rts
+fat32_restore_directory:
+  pha
+  
+  ;restore directory state
+  lda zp_sd_cdcluster
+  sta fat32_nextcluster
+  lda zp_sd_cdcluster+1
+  sta fat32_nextcluster+1
+  lda zp_sd_cdcluster+2
+  sta fat32_nextcluster+2
+  lda zp_sd_cdcluster+3
+  sta fat32_nextcluster+3
+
+  jsr fat32_seekcluster
+
+  ; Set the pointer to a large value so we always read a sector the first time through
+  lda #$ff
+  sta zp_sd_address+1
+
+  pla
+  rts
 
 ; parse a FAT32 directory entry and output
 fat32_dir:
   pha
   phx
   phy
-
+  
 @start:
   jsr fat32_readdirent
   bcs @done
@@ -734,11 +769,11 @@ fat32_dir:
   bne @start 
 
   jsr display_message
-  .byte "      ", 0
+  .byte "   $", 0
 
 ; get the file size
   ldy #$1F
-@filesizeloop:
+  @filesizeloop:
   lda (zp_sd_address), y
   jsr print_hex
   dey
@@ -746,17 +781,18 @@ fat32_dir:
   bne @filesizeloop
 
   jsr print_crlf
- 
+
   bra @start
   
 @done:
+
+  jsr fat32_restore_directory
 
   ply
   plx
   pla
   rts
 
-;
 
 dump_file:
   ; Open root directory

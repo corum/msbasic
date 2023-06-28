@@ -85,7 +85,6 @@ cmd_chdir:
     jsr display_message
     .byte 10, 13, "Directory found", 10, 13, 0
 
-    jsr fat32_opendirent
     jmp newprompt
 
 ; ************************************************************

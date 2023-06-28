@@ -246,7 +246,7 @@ sd_readsector:
   sta PORTA
 
   jsr display_message
-  .byte "READ: ", 0
+  .byte 10,13,"sd_readsector: ", 0
 
   ; Command 17, arg is sector number, crc not checked
   lda #$51                    ; CMD17 - READ_SINGLE_BLOCK
