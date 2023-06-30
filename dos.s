@@ -65,8 +65,14 @@ process_command:
 @match_quit:
     jsr match_command
     .byte "QUIT",0
-    bcs @match_woz
+    bcs @match_test
     jmp cmd_exit
+
+@match_test:
+;    jsr match_command
+;    .byte "TEST",0
+;    bcs @match_woz
+;    jmp cmd_test
 
 @match_woz:
     jsr match_command
@@ -78,6 +84,35 @@ process_command:
     jsr display_message
     .byte 10, 13, "Unknown Command", 10, 13, 0
     jmp newprompt
+
+cmd_test:
+;   lda #$60
+;    sta zp_sd_address
+;   lda #$A0
+;    sta zp_sd_address+1
+    
+;    inx
+;    stx zp_sd_temp
+;    lda #>dos_command
+;    sta zp_sd_temp+1
+;    clc
+;    lda #<dos_command
+;    adc zp_sd_temp
+;    sta zp_sd_temp       ; zp_sd_temp points to command line parameters
+
+;    ldx zp_sd_temp      ; set x and y to point to the command line parameter address
+;    ldy zp_sd_temp + 1
+
+;    jsr fat32_evaluate_filename
+;    bcc @found1
+;    jsr display_message
+;    .byte 10, 13, "string doesn't match", 10, 13, 0
+;    jmp newprompt    
+;@found1:
+;    jsr display_message
+;    .byte 10, 13, "string matches", 10, 13, 0
+
+;    jmp newprompt
 
 cmd_chdir:
     inx
@@ -119,7 +154,6 @@ cmd_dir:
     jmp newprompt
 
 cmd_diskstat:
-
     lda #$00
     sta zp_sd_temp + 1
     
