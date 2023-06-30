@@ -135,9 +135,19 @@ PS2_KEYS       = $01
 PS2_PARITY     = $02
 PS2_STOP       = $03
 
-.segment "OS"
-.include "libfat32.s"
-.include "dos.s"
+via_init:
+    lda #%11111111          ; Set all pins on port B to output
+    sta DDRB
+
+    lda #PORTA_OUTPUTPINS   ; Set various pins on port A to output
+    sta DDRA
+
+    lda #CFGCA
+    sta PCR        ; configure CA2 for negative edge independent interrupt, for PS/2
+
+    lda #$83
+    sta IER        ; enable interrupts for CA1 and CA2
+    rts
 
 ;CODE
 init:
@@ -204,46 +214,30 @@ init:
     jsr WOZMON
     jmp @loop
 
-
-via_init:
-    lda #%11111111          ; Set all pins on port B to output
-    sta DDRB
-
-    lda #PORTA_OUTPUTPINS   ; Set various pins on port A to output
-    sta DDRA
-
-    lda #CFGCA
-    sta PCR        ; configure CA2 for negative edge independent interrupt, for PS/2
-
-    lda #$83
-    sta IER        ; enable interrupts for CA1 and CA2
-    rts
-
-
-; Display startup message
-ShowStartMsg:
-;    jsr tx_startup_message
-     rts
-
 MSG_SYNATAXERROR:
     .byte "SYNTAX ERROR"
-    .byte CR,LF,CR,LF,0
+    .byte CR,LF,0
 
 MSG_FILENOTFOUND:
     .byte "FILE NOT FOUND"
-    .byte CR,LF,CR,LF,0
+    .byte CR,LF,0
 
 MSG_FILE_ERROR:
     .byte "FILE ERROR"
-    .byte CR,LF,CR,LF,0
+    .byte CR,LF,0
 
 MSG_LOAD:
     .byte "LOADED"
-    .byte CR,LF,CR,LF,0
+    .byte CR,LF,0
 
 MSG_SAVE:
     .byte "SAVED"
     .byte CR,LF,CR,LF,0
+
+.segment "OS"
+.include "libfat32.s"
+.include "dos.s"
+
 
 wdc_pause:
     phx
@@ -280,42 +274,6 @@ tx_char_sync:
     jsr wdc_pause
 
     rts
-
-;rx_char_sync:
-;    lda A_STS              ; get status byte
-;    and #$08               ; max rx buffer status flag
-;    beq rx_char_sync       ; loop if rx buffer is empty   
-;    lda A_RXD              ; get byte from ACIA
-;    rts
-
-;rx_char_sync_nowait:
-;    lda A_STS              ; get status byte
-;    and #$08               ; max rx buffer status flag
-;    beq @nochar            ; exit with a null if the buffer is empty  
-;    lda A_RXD              ; get byte from ACIA
-;    bra @exit
-;@nochar:
-;    lda #$00
-;    bra @exit
-
-;@exit:
-;    rts
-
-
-;tx_backspace:
-;    pha
-;    phx
-;    ldx #$FF
-;@loop:
-;    inx
-;    lda Backspace,X
-;    beq @exit
-;    jsr MONCOUT
-;    bne @loop
-;@exit:
-;    plx
-;    pla
-;    rts
 
 eb_load:
     pha
@@ -416,10 +374,10 @@ read_char_async:
 @exit:
     rts
 
-read_char_echo:
-    jsr read_char
-    jsr display_char
-    rts
+;read_char_echo:
+;    jsr read_char
+;    jsr display_char
+;    rts
 
 read_char_upper_echo:
     jsr read_char_upper
@@ -508,7 +466,36 @@ print_space:
     jsr print_char
     pla
     rts
-    
+
+    ; address stored in zp_sd_temp
+print_hex_word:
+    pha
+    phy
+    ldy #1
+    lda (zp_sd_temp),y
+    jsr print_hex
+    dey
+    lda (zp_sd_temp),y
+    jsr print_hex
+
+    ply
+    pla
+    rts
+
+    ; address stored in zp_sd_temp
+print_hex_dword:
+    pha
+    phy
+    ldy #3
+@loopdword:
+    lda (zp_sd_temp),y
+    jsr print_hex
+    dey
+    bpl @loopdword
+    ply
+    pla
+    rts
+
 print_hex:
     pha
     ror
@@ -1201,180 +1188,180 @@ draw_char:
 ; graphics tests
 ; ============================================================================================
 
-linetests:
-    jsr linetest1
-    jsr cls
-    jsr linetest2
-    jsr cls
-    jsr linetest3
-    rts
+;linetests:
+;    jsr linetest1
+;    jsr cls
+;    jsr linetest2
+;    jsr cls
+;    jsr linetest3
+;    rts
 
-linetest1:
-    stz X1
-    stz X1_H
+;linetest1:
+;    stz X1
+;    stz X1_H
 
-    stz X2_H
-    stz Y1
+;    stz X2_H
+;    stz Y1
 
-    ldy #$C7
-    ldx #$01   
-    sty Y2
-@effectx:
-    ;inc DRAW_COLOR
-    stx X2
-    jsr draw_line
-    inx
-    bne @effectx
+;    ldy #$C7
+;    ldx #$01   
+;    sty Y2
+;@effectx:
+;    ;inc DRAW_COLOR
+;    stx X2
+;    jsr draw_line
+;    inx
+;    bne @effectx
+;
+;    inc X2_H
+;@effectx2:
+;    ;inc DRAW_COLOR
+;    stx X2
+;    jsr draw_line
+;    inx
+;    cpx #$3F
+;    bne @effectx2
+;@donex:
+;    dey
+;    dex
+;    stx X2
 
-    inc X2_H
-@effectx2:
-    ;inc DRAW_COLOR
-    stx X2
-    jsr draw_line
-    inx
-    cpx #$3F
-    bne @effectx2
-@donex:
-    dey
-    dex
-    stx X2
-
-@effecty:
-    ;inc DRAW_COLOR
-    sty Y2
-    jsr draw_line
-    dey
-    bne @effecty
-    rts
-
-
-linetest2:
-    pha
-    phx
-    phy
+;@effecty:
+;    ;inc DRAW_COLOR
+;    sty Y2
+;    jsr draw_line
+;    dey
+;    bne @effecty
+;    rts
 
 
-    ; 0,0 - 255,128
-    lda #$02
-    sta DRAW_COLOR
+;linetest2:
+;    pha
+;    phx
+;    phy
 
-    stz X1
-    stz X1_H
-    stz Y1        ; Origin is (0,0)
+
+;    ; 0,0 - 255,128
+;    lda #$02
+;    sta DRAW_COLOR
+
+;    stz X1
+;    stz X1_H
+;    stz Y1        ; Origin is (0,0)
     
-    lda #$01
-    sta X2_H
+;    lda #$01
+;    sta X2_H
 
-    lda #$3F
-    sta X2    
+;    lda #$3F
+;    sta X2    
 
-    lda #$C7
-    sta Y2        ; Destination (320x200)
+;    lda #$C7
+;    sta Y2        ; Destination (320x200)
 
-    jsr draw_line
+;    jsr draw_line
 
     ; 0,128 - 255,0
-    lda #$04
-    sta DRAW_COLOR
+;    lda #$04
+;    sta DRAW_COLOR
 
-    stz X1_H
-    stz X1       ; (0, 200)
-    lda #$C7
-    sta Y1
+;    stz X1_H
+;    stz X1       ; (0, 200)
+;    lda #$C7
+;    sta Y1
 
-    lda #$01
-    sta X2_H
-    lda #$3F
-    sta X2        ; (320, 0)
+;    lda #$01
+;    sta X2_H
+;    lda #$3F
+;    sta X2        ; (320, 0)
 
-    stz Y2
-    jsr draw_line
+;    stz Y2
+;    jsr draw_line
 
 
-    ; draw backwards
+;    ; draw backwards
 
-    ; 320,64 - 0,32 
+;    ; 320,64 - 0,32 
 
-    lda #$01
-    sta X2_H
+;    lda #$01
+;    sta X2_H
 
-    lda #$3F
-    sta X2    
+;    lda #$3F
+;    sta X2    
 
-    lda #$40
-    sta Y2        ; Origin (320x64)
+;    lda #$40
+;    sta Y2        ; Origin (320x64)
 
-    ;lda #$02
-    ;sta DRAW_COLOR
+;    ;lda #$02
+;    ;sta DRAW_COLOR
 
-    stz X1
-    stz X1_H
+;    stz X1
+;    stz X1_H
 
-    lda #$20
-    sta Y1        ; Dest is (0,32)
+;    lda #$20
+;    sta Y1        ; Dest is (0,32)
     
 
-    jsr draw_line
+;    jsr draw_line
 
-    ply
-    plx
-    pla
-    rts
+;    ply
+;    plx
+;    pla
+;    rts
 
-linetest3:
-    pha
-    phx
-    phy
+;linetest3:
+;    pha
+;    phx
+;    phy
 
-    ;lda #$03
-    ;sta DRAW_COLOR
+;    ;lda #$03
+;    ;sta DRAW_COLOR
 
-    stz X1
-    stz X1_H
-    stz X2
-    stz X2_H
-    stz Y2
-    lda #$C7
-    sta Y1
+;    stz X1
+;    stz X1_H
+;    stz X2
+;    stz X2_H
+;    stz Y2
+;    lda #$C7
+;    sta Y1
 
-@loop:    
+;@loop:    
 
-    inc DRAW_COLOR
-    jsr draw_line
+;    inc DRAW_COLOR
+;    jsr draw_line
 
-@xlow:    
-    clc
-    lda X2
-    adc #$08
-    sta X2
-    bcs @xhigh
+;@xlow:    
+;    clc
+;    lda X2
+;    adc #$08
+;    sta X2
+;    bcs @xhigh
     
-    cmp #$3F
-    beq @xcheck
-    bra @y
+;    cmp #$3F
+;    beq @xcheck
+;    bra @y
 
-@xhigh:
-    inc X2_H
+;@xhigh:
+;    inc X2_H
 
-@y:
-    sec
-    lda Y1
-    sbc #$06
-    bcc @exit
-    sta Y1    
-    bra @loop
+;@y:
+;    sec
+;    lda Y1
+;    sbc #$06
+;    bcc @exit
+;    sta Y1    
+;    bra @loop
 
-@xcheck:
-    lda X2_H
-    lsr
-    bcc @loop
+;@xcheck:
+;    lda X2_H
+;    lsr
+;    bcc @loop
 
-@exit:
+;@exit:
 
-    ply
-    plx
-    pla
-    rts
+;    ply
+;    plx
+;    pla
+;    rts
 
 set_hires_page1:
     pha

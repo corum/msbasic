@@ -20,7 +20,8 @@ fat32_nextcluster       = zp_fat32_variables + $10  ; 4 bytes
 fat32_bytesremaining    = zp_fat32_variables + $14  ; 4 bytes 
 zp_sd_address           = zp_fat32_variables + $18  ; 2 bytes
 zp_sd_currentsector     = zp_fat32_variables + $1A  ; 4 bytes
-zp_sd_cdcluster         = zp_fat32_variables + $1E  ; 4 bytes
+zp_sd_cd_cluster        = zp_fat32_variables + $1E  ; 4 bytes
+zp_sd_temp              = zp_fat32_variables + $22  ; 1 byte
 
 fat32_errorstage        = fat32_bytesremaining  ; only used during initializatio
 fat32_filenamepointer   = fat32_bytesremaining  ; only used when searching for a file
@@ -402,25 +403,60 @@ fat32_openroot:
 
   lda fat32_rootcluster
   sta fat32_nextcluster
-  sta zp_sd_cdcluster
+  sta zp_sd_cd_cluster
 
   lda fat32_rootcluster+1
   sta fat32_nextcluster+1
-  sta zp_sd_cdcluster+1
+  sta zp_sd_cd_cluster+1
 
   lda fat32_rootcluster+2
   sta fat32_nextcluster+2
-  sta zp_sd_cdcluster+2
+  sta zp_sd_cd_cluster+2
 
   lda fat32_rootcluster+3
   sta fat32_nextcluster+3
-  sta zp_sd_cdcluster+3
+  sta zp_sd_cd_cluster+3
 
   jsr fat32_seekcluster
 
   ; Set the pointer to a large value so we always read a sector the first time through
   lda #$ff
   sta zp_sd_address+1
+
+  rts
+
+fat32_open_cd:
+  ; Prepare to read from a file or directory based on a dirent
+  ;
+
+  pha
+  phx
+  phy
+
+  ; Seek to first cluster of current directory
+  lda zp_sd_cd_cluster
+  sta fat32_nextcluster
+  lda zp_sd_cd_cluster+1
+  sta fat32_nextcluster+1
+  lda zp_sd_cd_cluster+2
+  sta fat32_nextcluster+2
+  lda zp_sd_cd_cluster+3
+  sta fat32_nextcluster+3
+
+  lda #<fat32_readbuffer
+  sta fat32_address
+  lda #>fat32_readbuffer
+  sta fat32_address+1
+
+  jsr fat32_seekcluster
+  ; Set the pointer to a large value so we always read a sector the first time through
+  lda #$ff
+  sta zp_sd_address+1
+  
+  ply
+  plx
+  pla
+
 
   rts
 
@@ -448,20 +484,34 @@ fat32_opendirent:
   ldy #26
   lda (zp_sd_address),y
   sta fat32_nextcluster
-  sta zp_sd_cdcluster
+  sta zp_sd_cd_cluster
   iny
   lda (zp_sd_address),y
   sta fat32_nextcluster+1
-  sta zp_sd_cdcluster+1
+  sta zp_sd_cd_cluster+1
   ldy #20
   lda (zp_sd_address),y
   sta fat32_nextcluster+2
-  sta zp_sd_cdcluster+2
+  sta zp_sd_cd_cluster+2
   iny
   lda (zp_sd_address),y
   sta fat32_nextcluster+3
-  sta zp_sd_cdcluster+3
+  sta zp_sd_cd_cluster+3
 
+  ; if we're opening a directory entry with 0 cluster, use the root cluster
+  lda fat32_nextcluster+3
+  bne @seek
+  lda fat32_nextcluster+2
+  bne @seek
+  lda fat32_nextcluster+1
+  bne @seek
+  lda fat32_nextcluster
+  bne @seek
+  lda fat32_rootcluster
+  sta fat32_nextcluster
+  sta zp_sd_cd_cluster
+
+@seek:
   jsr fat32_seekcluster
 
   ; Set the pointer to a large value so we always read a sector the first time through
@@ -529,8 +579,7 @@ fat32_readdirent:
   clc
   rts
 
-
-fat32_finddirent:
+fat32_finddirent_directory:
   ; Finds a particular directory entry.  X,Y point to the 11-character filename to seek.
   ; The directory should already be open for iteration.
 
@@ -540,14 +589,16 @@ fat32_finddirent:
   
   ; Iterate until name is found or end of directory
 @direntloop:
-  jsr fat32_readdirent
   ldy #10
+  jsr fat32_readdirent
+  and #$10                ; is it a directory?
+  bne @direntloop
   bcc @comparenameloop
   rts ; with carry set
 
 @comparenameloop:
   lda (zp_sd_address),y
-  bne @skip ; if it's null
+  beq @skip ; if it's null
   cmp #$20  ; or if it's a space
   beq @skip
 
@@ -559,7 +610,103 @@ fat32_finddirent:
 
   ; Found it
 
-  jsr fat32_opendirent
+  clc
+  rts
+
+fat32_finddirent:
+  ; Finds a particular directory entry.  X,Y point to the 11-character filename to seek.
+  ; The directory should already be open for iteration.
+
+  ; Form ZP pointer to user's filename
+  stx fat32_filenamepointer
+  sty fat32_filenamepointer+1
+
+; walk through the fat directory entry and move all $00 to $20
+  ldy #$A
+@normalize_fat:
+  lda (zp_sd_address),y
+  bne @next
+  lda #$20
+  sta (zp_sd_address),y  ; change the #$20 to #$00  
+@next:
+  dey
+  bpl @normalize_fat
+
+; walk through command line parameter and move all $00 to $20
+  ldy #$A
+@normalize_param:
+  lda (fat32_filenamepointer),y
+  bne @next2
+  lda #$20
+  sta (fat32_filenamepointer),y  ; change the #$20 to #$00  
+@next2:
+  dey
+  bpl @normalize_param
+
+;  ldy #$A
+;@stackparam:
+;  lda (fat32_filenamepointer),y
+;  pha
+;  dey
+;  bpl @stackparam
+
+;  ldy #$0
+;@expandperiod:
+;  iny
+;  pla
+;  cmp #'.'
+;  beq @copytoend
+;  cpy #$b
+;  bne @expandperiod
+;  bra @direntloop
+
+;@copytoend:
+;  tya
+;  tax  ; stash progress in x register
+
+;@copyloop:
+;  lda #$20
+;  sta (fat32_filenamepointer),Y  ; write spaces up to extension
+;  iny
+;  cpy #$8
+;  bne @copyloop
+
+;@writeext:
+;  sta (fat32_filenamepointer),Y
+;  pla
+;  iny
+;  inx
+;  cpy #$b
+;  bne @writeext
+  
+;  cpx #$b
+;  beq @direntloop
+
+;  txa
+;  tay
+;@poploop:
+;  pla
+;  iny
+;  cpy #$b
+;  bne @poploop
+
+  ; Iterate until name is found or end of directory
+@direntloop:
+  jsr fat32_readdirent
+  ldy #10
+  bcc @comparenameloop
+  rts ; with carry set
+
+; walk through filename and paramter to see if they are exact match
+@comparenameloop:
+  lda (zp_sd_address),y
+  cmp (fat32_filenamepointer),y
+  bne @direntloop ; no match
+  dey
+  bpl @comparenameloop
+
+  ; Found it
+
   clc
   rts
 
@@ -687,28 +834,6 @@ fat32_start:
   jsr fat32_openroot
   rts
 
-fat32_restore_directory:
-  pha
-  
-  ;restore directory state
-  lda zp_sd_cdcluster
-  sta fat32_nextcluster
-  lda zp_sd_cdcluster+1
-  sta fat32_nextcluster+1
-  lda zp_sd_cdcluster+2
-  sta fat32_nextcluster+2
-  lda zp_sd_cdcluster+3
-  sta fat32_nextcluster+3
-
-  jsr fat32_seekcluster
-
-  ; Set the pointer to a large value so we always read a sector the first time through
-  lda #$ff
-  sta zp_sd_address+1
-
-  pla
-  rts
-
 ; parse a FAT32 directory entry and output
 fat32_dir:
   pha
@@ -750,28 +875,22 @@ fat32_dir:
   jsr display_message
   .byte "      ", 0
 
+; WRITE THE FILENAME
 @loopfilename:
   lda (zp_sd_address), y
   jsr print_char
-
   cpy #$7
   bne @nodot
-  
   jsr print_space
-
 @nodot:
   iny
   cpy #$B
   bne @loopfilename
 
-  txa
-  and #$10
-  bne @start 
 
+; WRITE OUT THE FILE SIZE
   jsr display_message
-  .byte "   $", 0
-
-; get the file size
+  .byte " $", 0
   ldy #$1F
   @filesizeloop:
   lda (zp_sd_address), y
@@ -780,13 +899,34 @@ fat32_dir:
   cpy #$1B
   bne @filesizeloop
 
+  ; WRITE OUT THE FIRST CLUSTER
+  jsr display_message
+  .byte " $", 0
+  
+  ; get low byte
+  ldy #$15 
+  lda (zp_sd_address),y
+  jsr print_hex
+  dey
+  lda (zp_sd_address),y
+  jsr print_hex
+
+  ; get high byte
+  ldy #$1B
+  lda (zp_sd_address),y
+  jsr print_hex
+  dey
+  lda (zp_sd_address),y
+  jsr print_hex
+
+
   jsr print_crlf
 
   bra @start
   
 @done:
 
-  jsr fat32_restore_directory
+  jsr fat32_open_cd
 
   ply
   plx
@@ -794,38 +934,38 @@ fat32_dir:
   rts
 
 
-dump_file:
+;;dump_file:
   ; Open root directory
-  jsr fat32_openroot
+;  jsr fat32_openroot
 
-  ; Find file by name
-  ldx #<fat32_filename
-  ldy #>fat32_filename
-  jsr fat32_finddirent
-  bcc @foundfile
+;  ; Find file by name
+;  ldx #<fat32_filename
+;  ldy #>fat32_filename
+;  jsr fat32_finddirent
+;  bcc @foundfile
 
-  ; File not found:
-  jsr display_message
-  .byte 10,13,"File Not Found", 10, 13, 0
-  rts
+;  ; File not found:
+;  jsr display_message
+;  .byte 10,13,"File Not Found", 10, 13, 0
+;  rts
 
-@foundfile:
+;@foundfile:
  
-   jsr display_message
-  .byte 10,13,"File found opening", 10, 13, 0
+;   jsr display_message
+;  .byte 10,13,"File found opening", 10, 13, 0
 
-  ; Open file
-  jsr fat32_opendirent
+;  ; Open file
+;  jsr fat32_opendirent
 
-  ; Read file contents into buffer
-  lda #<$400 ; screen ram
-  sta fat32_address
-  lda #>$400
-  sta fat32_address+1
+;  ; Read file contents into buffer
+;  lda #<$400 ; screen ram
+;  sta fat32_address
+;  lda #>$400
+;  sta fat32_address+1
 
-  jsr fat32_file_read
+;  jsr fat32_file_read
 
-rts
+;rts
 
 ; open file and read contents into RAM
 ; reuse the RamDisk variables

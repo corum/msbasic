@@ -20,8 +20,11 @@ read_command:
 
 process_command:
     lda #$00
-    sta dos_command, x
-
+@padnulls:
+    sta dos_command,x
+    inx
+    bne @padnulls
+    
 ; match with an existing command
 
     jsr match_command
@@ -38,8 +41,14 @@ process_command:
 @match_dir:
     jsr match_command
     .byte "DIR",0
-    bcs @match_echo
+    bcs @match_diskstat
     jmp cmd_dir
+
+@match_diskstat:
+    jsr match_command
+    .byte "DISKSTAT",0
+    bcs @match_echo
+    jmp cmd_diskstat
 
 @match_echo:
     jsr match_command
@@ -72,7 +81,17 @@ process_command:
 
 cmd_chdir:
     inx
-    ldy #>dos_command
+    stx zp_sd_temp
+    lda #>dos_command
+    sta zp_sd_temp+1
+    clc
+    lda #<dos_command
+    adc zp_sd_temp
+    sta zp_sd_temp       ; zp_sd_temp points to command line parameters
+
+    ldx zp_sd_temp      ; set x and y to point to the command line parameter address
+    ldy zp_sd_temp + 1
+    jsr fat32_open_cd
 
     jsr fat32_finddirent
     bcc @found
@@ -84,6 +103,7 @@ cmd_chdir:
 @found:
     jsr display_message
     .byte 10, 13, "Directory found", 10, 13, 0
+    jsr fat32_opendirent
 
     jmp newprompt
 
@@ -96,6 +116,76 @@ cmd_cls:
 
 cmd_dir:
     jsr fat32_dir
+    jmp newprompt
+
+cmd_diskstat:
+
+    lda #$00
+    sta zp_sd_temp + 1
+    
+    jsr display_message
+    .byte 10,13,"fat32_fatstart            $", 0
+    lda #fat32_fatstart
+    sta zp_sd_temp
+    jsr print_hex_dword
+
+    jsr display_message
+    .byte 10,13,"fat32_datastart           $", 0
+    lda #fat32_datastart
+    sta zp_sd_temp
+    jsr print_hex_dword
+
+    jsr display_message
+    .byte 10,13,"fat32_rootcluster         $", 0
+    lda #fat32_rootcluster
+    sta zp_sd_temp
+    jsr print_hex_dword
+
+    jsr display_message
+    .byte 10,13,"fat32_sectorspercluster   $", 0
+    lda fat32_sectorspercluster
+    jsr print_hex
+
+    jsr display_message
+    .byte 10,13,"fat32_pendingsectors      $", 0
+    lda fat32_pendingsectors
+    jsr print_hex
+
+    jsr display_message
+    .byte 10,13,"fat32_address             $", 0
+    lda #fat32_address
+    sta zp_sd_temp
+    jsr print_hex_word
+
+    jsr display_message
+    .byte 10,13,"fat32_nextcluster         $", 0
+    lda #fat32_nextcluster
+    sta zp_sd_temp
+    jsr print_hex_dword
+
+    jsr display_message
+    .byte 10,13,"fat32_bytesremaining      $", 0
+    lda #fat32_bytesremaining
+    sta zp_sd_temp
+    jsr print_hex_dword
+
+    jsr display_message
+    .byte 10,13,"zp_sd_currentsector       $", 0
+    lda #zp_sd_currentsector
+    sta zp_sd_temp
+    jsr print_hex_dword
+
+    jsr display_message
+    .byte 10,13,"zp_sd_cd_cluster          $", 0
+    lda #zp_sd_cd_cluster
+    sta zp_sd_temp
+    jsr print_hex_dword
+
+    jsr display_message
+    .byte 10,13,"zp_sd_address             $", 0
+    lda #zp_sd_cd_cluster
+    sta zp_sd_temp
+    jsr print_hex_word
     jmp newprompt
 
 cmd_echo:
