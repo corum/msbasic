@@ -5,10 +5,12 @@
 ; fat32_workspace    - a large page-aligned 512-byte workspace
 ; zp_fat32_variables - 24 bytes of zero-page storage for variables etc
 
+;fat32_workspace        = $600
+;fat32_filename         = $8F0
 
-zp_fat32_variables = $30
+zp_fat32_variables      = $30
 
-fat32_readbuffer   = fat32_workspace
+fat32_readbuffer        = fat32_workspace  ; $600
 
 fat32_fatstart          = zp_fat32_variables + $00  ; 4 bytes
 fat32_datastart         = zp_fat32_variables + $04  ; 4 bytes

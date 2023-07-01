@@ -1,3 +1,12 @@
+; DOS variables
+; dos_command    = $800   ; command line
+; dos_params     = $8EF
+; dos_param_4    = $8EE   ; the command
+; dos_param_3    = $8ED
+; dos_param_2    = $8EC
+; dos_param_1    = $8EB
+; dos_param_0    = $8EA
+
 dos:
     jsr _cls
     jsr fat32_start
@@ -12,21 +21,36 @@ newprompt:
 read_command:
     jsr read_char
     cmp #$0D
-    beq process_command
+    beq @parse_command
     jsr display_char
     sta dos_command,x
     inx
     bra read_command
 
-process_command:
+; @parse_command: 
+; walks through the command string, terminated by a null, 5th param
+; or $80th character
+@parse_command:
     lda #$00
-@padnulls:
-    sta dos_command,x
-    inx
-    bne @padnulls
-    
-; match with an existing command
+    sta dos_params
+    ldy #$FF
+@count_params:
+    iny
+    cpy #$80
+    beq @process_command
+    lda dos_command,y
+    beq @process_command
+    cmp #$20 ; is it a space
+    bne @count_params
+    ldx dos_params
+    inc dos_params
+    tya
+    sta dos_param_0,x   ; x is the parameter number, a is the position in the string
+    cpx #$04
+    bne @count_params
 
+; match with an existing command
+@process_command:
     jsr match_command
     .byte "CD",0
     bcs @match_cls
@@ -59,8 +83,14 @@ process_command:
 @match_exit:
     jsr match_command
     .byte "EXIT",0
-    bcs @match_quit
+    bcs @match_load
     jmp cmd_exit
+
+@match_load:
+    jsr match_command
+    .byte "LOAD",0
+    bcs @match_quit
+    jmp cmd_load
 
 @match_quit:
     jsr match_command
@@ -69,10 +99,10 @@ process_command:
     jmp cmd_exit
 
 @match_test:
-;    jsr match_command
-;    .byte "TEST",0
-;    bcs @match_woz
-;    jmp cmd_test
+    jsr match_command
+    .byte "TEST",0
+    bcs @match_woz
+    jmp cmd_test
 
 @match_woz:
     jsr match_command
@@ -86,35 +116,35 @@ process_command:
     jmp newprompt
 
 cmd_test:
-;   lda #$60
-;    sta zp_sd_address
-;   lda #$A0
-;    sta zp_sd_address+1
+    lda #$20
+    sta zp_sd_address
+    lda #$A0
+    sta zp_sd_address+1
     
-;    inx
-;    stx zp_sd_temp
-;    lda #>dos_command
-;    sta zp_sd_temp+1
-;    clc
-;    lda #<dos_command
-;    adc zp_sd_temp
-;    sta zp_sd_temp       ; zp_sd_temp points to command line parameters
+    ldx dos_param_0
+    inx
+    stx zp_sd_temp
+    ldy #>dos_command
+    sty zp_sd_temp+1
+    clc
+    lda #<dos_command
+    adc zp_sd_temp
+    sta zp_sd_temp       ; zp_sd_temp points to command line parameters
+    ; x points to low word, y points to high word of dos_param_0+1
 
-;    ldx zp_sd_temp      ; set x and y to point to the command line parameter address
-;    ldy zp_sd_temp + 1
+    jsr fat32_evaluate_filename
+    bcc @found1
+    jsr display_message
+    .byte 10, 13, "string doesn't match", 10, 13, 0
+    jmp newprompt    
+@found1:
+    jsr display_message
+    .byte 10, 13, "string matches", 10, 13, 0
 
-;    jsr fat32_evaluate_filename
-;    bcc @found1
-;    jsr display_message
-;    .byte 10, 13, "string doesn't match", 10, 13, 0
-;    jmp newprompt    
-;@found1:
-;    jsr display_message
-;    .byte 10, 13, "string matches", 10, 13, 0
-
-;    jmp newprompt
+    jmp newprompt
 
 cmd_chdir:
+    ldx dos_param_0
     inx
     stx zp_sd_temp
     lda #>dos_command
@@ -124,7 +154,7 @@ cmd_chdir:
     adc zp_sd_temp
     sta zp_sd_temp       ; zp_sd_temp points to command line parameters
 
-    ldx zp_sd_temp      ; set x and y to point to the command line parameter address
+    ldx zp_sd_temp       ; set x and y to point to the command line parameter address
     ldy zp_sd_temp + 1
     jsr fat32_open_cd
 
@@ -238,6 +268,21 @@ cmd_exit:
     jsr display_message
     .byte 10, 13, "Goodbye!", 10, 13, 0
     jmp WOZMON
+
+cmd_load:
+    inx
+    stx zp_sd_temp
+    lda #>dos_command
+    sta zp_sd_temp+1
+    clc
+    lda #<dos_command
+    adc zp_sd_temp
+    sta zp_sd_temp       ; zp_sd_temp points to command line parameters
+
+    ldx zp_sd_temp      ; set x and y to point to the command line parameter address
+    ldy zp_sd_temp + 1
+
+    jmp newprompt
 
 ;****************************************************************************
 ; STRING COMPARISON
