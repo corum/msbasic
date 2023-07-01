@@ -9,7 +9,6 @@
 
 dos:
     jsr _cls
-    jsr fat32_start
 
 newprompt:
     jsr display_message
@@ -91,8 +90,14 @@ read_command:
 @match_load:
     jsr match_command
     .byte "LOAD",0
-    bcs @match_quit
+    bcs @match_mount
     jmp cmd_load
+
+@match_mount:
+    jsr match_command
+    .byte "MOUNT",0
+    bcs @match_quit
+    jmp cmd_mount
 
 @match_quit:
     jsr match_command
@@ -117,27 +122,14 @@ read_command:
     .byte 10, 13, "Unknown Command", 10, 13, 0
     jmp newprompt
 
-cmd_test:
-    ;lda #$20
-    ;sta zp_sd_address
-    ;lda #$A0
-    ;sta zp_sd_address+1
-    jsr fat32_open_cd
-    
+cmd_test:    
     ldx dos_param_0
     inx
-    stx zp_sd_temp      ; zp_sd_temp points to command line parameters
-    ldy #>dos_command
-    sty zp_sd_temp+1    ; set x and y to point to the command line parameter address
+    stx fat32_filenamepointer
+    ldy #>dos_command ; set x and y to point to the command line parameter address
+    sty fat32_filenamepointer+1
 
-    jsr fat32_finddirent
-    bcc @found1
-    jsr display_message
-    .byte 10, 13, "string doesn't match", 10, 13, 0
-    jmp newprompt    
-@found1:
-    jsr display_message
-    .byte 10, 13, "string matches", 10, 13, 0
+    jsr fat32_prep_fileparam
 
     jmp newprompt
 
@@ -150,6 +142,8 @@ cmd_chdir:
     ldy #>dos_command ; set x and y to point to the command line parameter address
     sty fat32_filenamepointer+1
     
+    jsr fat32_prep_fileparam
+
     jsr fat32_finddirent
     bcc @found
 
@@ -277,6 +271,10 @@ cmd_load:
 
     jmp newprompt
 
+cmd_mount:
+    jsr fat32_start
+    jmp newprompt
+    
 ;****************************************************************************
 ; STRING COMPARISON
 ; x contains the # of matching chars

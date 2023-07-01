@@ -81,13 +81,13 @@ FONTPTR_H      = $C1
 fat32_workspace= $800
 
 ; DOS
-dos_command    = $A00   ; command line
+dos_command    = $A00  ; command line
 dos_params     = $AFF
-dos_param_4    = $AFE  ; the command
-dos_param_3    = $AFD
-dos_param_2    = $AFC
-dos_param_1    = $AFB
-dos_param_0    = $AFA
+dos_param_3    = $AFE  ; the command
+dos_param_2    = $AFD
+dos_param_1    = $AFC
+dos_param_0    = $AFB
+dos_file_param = $AF0  ; 11 bytes
 
 ; TEXT MODE
 TEXT           = $400

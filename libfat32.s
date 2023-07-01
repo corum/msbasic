@@ -579,47 +579,75 @@ fat32_readdirent:
   clc
   rts
 
+; copy from filename to 11 bytes in form of FAT entry
+fat32_prep_fileparam:
+  pha
+  phy
+  ; fat32_filenamepointer points to the dos parameter
+  ; dos_file_param points to the formatted buffer
 
-
-;
-; prepare temps for filename string evaluations
-;
-fat32_init_filepointers:
-  ; setup pointer to filename operand
-  lda fat32_filenamepointer
-  sta zp_sd_temp
-  lda fat32_filenamepointer+1
-  sta zp_sd_temp+1
-
-  ; setup pointer to fat directory entry
-  lda zp_sd_address
-  sta zp_sd_temp+2
-  lda zp_sd_address + 1
-  sta zp_sd_temp+3
-
-  rts
-
-; walk through fat directory entry and file operand
-; exact match?
-
-fat32_is_exact_match:
-  ldy #$0A
-@comparenameloop:
-  lda (zp_sd_address),y
-  cmp #$20
-  beq @skipspace
-  cmp (fat32_filenamepointer),y
-  bne @nomatch
-@skipspace:
+  ldy #$A
+  lda #$20
+@clearfilename:
+  sta dos_file_param,y
   dey
-  bpl @comparenameloop
+  bpl @clearfilename
 
-@match:
-  clc 
-  rts
+@special_path_check:  
+  ldy #$00
+; check for '.'
+  lda (fat32_filenamepointer),y 
+  cmp #'.'
+  bne @not_special
+  sta dos_file_param,y
+  iny
+  lda (fat32_filenamepointer),y
+  cmp #'.'
+  bne @check_null             ; 2nd byte is not a period, see if it's null
+  sta dos_file_param,y
+  iny
+@check_null:
+  lda (fat32_filenamepointer),y
+  beq @special
 
-@nomatch:
-  sec
+; not special directory filename, do normal evaluation
+@not_special:
+  ldy #$FF
+
+@copyfilename:
+  iny
+  lda (fat32_filenamepointer),y
+  beq @done                     ; if we encounter a 0 in the param, we're done
+  cmp #$20                      ; if we encounter a space, we're done
+  beq @done
+  cmp #'.'                      ; if we encounter a dot, jump to the extension
+  beq @copy_extension      
+  sta dos_file_param,y          ; write to the buffer
+  cpy #$7
+  bne @copyfilename
+
+@copy_extension:
+  ldx #$8
+@copy_extension_loop:
+  ; y is the index into the dos param 
+  lda (fat32_filenamepointer),y
+  beq @done
+  cmp #$20
+  beq @done
+  sta dos_file_param, x
+  iny
+  inx
+  cpy #$B
+  bne @copy_extension_loop
+
+@done:  
+@special:
+
+  ; by the end, the filename is stored in dos_file_param in a format 
+  ; helpful for dirent filename comparison
+
+  ply
+  pla
   rts
 
 
@@ -631,8 +659,6 @@ fat32_is_exact_match:
 ; carry set means it doesn't match, carry clear means it matches
 
 fat32_evaluate_filename:
-  jsr fat32_init_filepointers
-
 ; walk through the fat directory entry and move all $00 to $20
   ldy #$A
 @normalize_fat:
@@ -644,84 +670,31 @@ fat32_evaluate_filename:
   dey
   bpl @normalize_fat
 
-; walk through command line parameter and move all $00 to $20
-;  ldy #$A
-;@normalize_param:
-;  lda (fat32_filenamepointer),y
-;  bne @next2
-;  lda #$20
-;  sta (fat32_filenamepointer),y  ; change the #$20 to #$00  
-;@next2:
-;  dey
-;  bpl @normalize_param
-
-; check for an exact match 
-  jsr fat32_is_exact_match
-  bcc @match
-
   ldy #$00
 @compare_filename:
-  lda (zp_sd_temp)
+  lda dos_file_param,y
   cmp #'*'
-  beq @skip2
-  cmp #'.'
-  beq @period
+  beq @skip2       ; match remainder of filename
   cmp #'?'
-  beq @nextchar
-  cmp (zp_sd_temp+2)
+  beq @nextchar    ; automatic char match
+  cmp (zp_sd_address),y
   bne @nomatch
 @nextchar:
-  inc zp_sd_temp   ; increment operand pointer
-  inc zp_sd_temp+2 ; increment fat entry pointer
   iny
   cpy #$08
   bne @compare_filename
-  beq @skip2
-
-@period:
-  ; period in operand, matches only if dirent filename is all #$20 up to extension
-  lda (zp_sd_temp+2)
-  cmp #$20
-  bne @nomatch
-  inc zp_sd_temp+2
-  iny
-  cpy #$08
-  bne @period
-  inc zp_sd_temp  ; skip the period in the operand
-  beq @skip2
 
 @skip2:
-  ; reset pointer to dirent filename
-  lda zp_sd_address
-  clc
-  adc #$8
-  sta zp_sd_temp+2
-
-  ; reset pointer to the operand  
-  ldy #9
-  lda fat32_filenamepointer
-  sta zp_sd_temp
-@seekdot:
-  dey
-  beq @compare_extension
-  inc zp_sd_temp
-  lda (zp_sd_temp)
-  cmp #'.'
-  bne @seekdot
-  inc zp_sd_temp ; step past the dot
-
+  ldy #$8  
 @compare_extension:
-  ldy #$2
-@extension_loop:
-  lda (zp_sd_temp)
+  lda dos_file_param,y
   cmp #'*'
   beq @match
-  cmp (zp_sd_temp+2)
+  cmp (zp_sd_address),y
   bne @nomatch
-  inc zp_sd_temp
-  inc zp_sd_temp+2
-  dey
-  bpl @extension_loop
+  iny
+  cpy #$B
+  bne @compare_extension
 
 @match:
   clc
@@ -735,7 +708,6 @@ fat32_evaluate_filename:
 fat32_finddirent:
   ; Finds a particular directory entry.  X,Y point to the 11-character filename to seek.
   ; The directory should already be open for iteration.
-  jsr fat32_init_filepointers
 
   ; Iterate until name is found or end of directory
 @direntloop:
@@ -752,11 +724,9 @@ fat32_finddirent:
   clc
   rts
 
-
 fat32_finddirent_directory:
   ; Finds a particular directory entry.  X,Y point to the 11-character filename to seek.
   ; The directory should already be open for iteration.
-  jsr fat32_init_filepointers
 
   ; Iterate until name is found or end of directory
 @direntloop:
