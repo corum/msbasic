@@ -1,25 +1,26 @@
 ; DOS variables
-; dos_command    = $800   ; command line
-; dos_params     = $8EF
-; dos_param_4    = $8EE   ; the command
-; dos_param_3    = $8ED
-; dos_param_2    = $8EC
-; dos_param_1    = $8EB
-; dos_param_0    = $8EA
+; dos_command    = $A00   ; command line
+; dos_params     = $AEF
+; dos_param_4    = $AEE   ; the command
+; dos_param_3    = $AED
+; dos_param_2    = $AEC
+; dos_param_1    = $AEB
+; dos_param_0    = $AEA
 
 dos:
     jsr _cls
     jsr fat32_start
 
 newprompt:
+    jsr display_message
+    .byte 10, 13, "/>", 0
     ldx #0
     ldy #0
     stx dos_command
-    jsr display_message
-    .byte 10, 13, "/>", 0
 
 read_command:
-    jsr read_char
+    jsr read_char_upper
+    and #$7F
     cmp #$0D
     beq @parse_command
     jsr display_char
@@ -33,6 +34,7 @@ read_command:
 @parse_command:
     lda #$00
     sta dos_params
+    sta dos_command,x
     ldy #$FF
 @count_params:
     iny
@@ -116,23 +118,19 @@ read_command:
     jmp newprompt
 
 cmd_test:
-    lda #$20
-    sta zp_sd_address
-    lda #$A0
-    sta zp_sd_address+1
+    ;lda #$20
+    ;sta zp_sd_address
+    ;lda #$A0
+    ;sta zp_sd_address+1
+    jsr fat32_open_cd
     
     ldx dos_param_0
     inx
-    stx zp_sd_temp
+    stx zp_sd_temp      ; zp_sd_temp points to command line parameters
     ldy #>dos_command
-    sty zp_sd_temp+1
-    clc
-    lda #<dos_command
-    adc zp_sd_temp
-    sta zp_sd_temp       ; zp_sd_temp points to command line parameters
-    ; x points to low word, y points to high word of dos_param_0+1
+    sty zp_sd_temp+1    ; set x and y to point to the command line parameter address
 
-    jsr fat32_evaluate_filename
+    jsr fat32_finddirent
     bcc @found1
     jsr display_message
     .byte 10, 13, "string doesn't match", 10, 13, 0
@@ -144,20 +142,14 @@ cmd_test:
     jmp newprompt
 
 cmd_chdir:
+    ;jsr fat32_open_cd
+
     ldx dos_param_0
     inx
-    stx zp_sd_temp
-    lda #>dos_command
-    sta zp_sd_temp+1
-    clc
-    lda #<dos_command
-    adc zp_sd_temp
-    sta zp_sd_temp       ; zp_sd_temp points to command line parameters
-
-    ldx zp_sd_temp       ; set x and y to point to the command line parameter address
-    ldy zp_sd_temp + 1
-    jsr fat32_open_cd
-
+    stx fat32_filenamepointer
+    ldy #>dos_command ; set x and y to point to the command line parameter address
+    sty fat32_filenamepointer+1
+    
     jsr fat32_finddirent
     bcc @found
 
@@ -166,9 +158,10 @@ cmd_chdir:
     jmp newprompt
 
 @found:
+    jsr fat32_opendirent
+
     jsr display_message
     .byte 10, 13, "Directory found", 10, 13, 0
-    jsr fat32_opendirent
 
     jmp newprompt
 

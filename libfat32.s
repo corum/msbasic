@@ -5,12 +5,12 @@
 ; fat32_workspace    - a large page-aligned 512-byte workspace
 ; zp_fat32_variables - 24 bytes of zero-page storage for variables etc
 
-;fat32_workspace        = $600
-;fat32_filename         = $8F0
+;fat32_workspace        = $800
+;fat32_filename         = $AF0
 
 zp_fat32_variables      = $30
 
-fat32_readbuffer        = fat32_workspace  ; $600
+fat32_readbuffer        = fat32_workspace  ; $800
 
 fat32_fatstart          = zp_fat32_variables + $00  ; 4 bytes
 fat32_datastart         = zp_fat32_variables + $04  ; 4 bytes
@@ -458,8 +458,6 @@ fat32_open_cd:
   ply
   plx
   pla
-
-
   rts
 
 
@@ -588,10 +586,10 @@ fat32_readdirent:
 ;
 fat32_init_filepointers:
   ; setup pointer to filename operand
-  stx fat32_filenamepointer
-  sty fat32_filenamepointer+1
-  stx zp_sd_temp
-  sty zp_sd_temp+1
+  lda fat32_filenamepointer
+  sta zp_sd_temp
+  lda fat32_filenamepointer+1
+  sta zp_sd_temp+1
 
   ; setup pointer to fat directory entry
   lda zp_sd_address
@@ -608,8 +606,11 @@ fat32_is_exact_match:
   ldy #$0A
 @comparenameloop:
   lda (zp_sd_address),y
+  cmp #$20
+  beq @skipspace
   cmp (fat32_filenamepointer),y
   bne @nomatch
+@skipspace:
   dey
   bpl @comparenameloop
 
@@ -638,21 +639,21 @@ fat32_evaluate_filename:
   lda (zp_sd_address),y
   bne @next
   lda #$20
-  sta (zp_sd_address),y  ; change the #$20 to #$00  
+  sta (zp_sd_address),y  ; change the #$00 to #$20  
 @next:
   dey
   bpl @normalize_fat
 
 ; walk through command line parameter and move all $00 to $20
-  ldy #$A
-@normalize_param:
-  lda (fat32_filenamepointer),y
-  bne @next2
-  lda #$20
-  sta (fat32_filenamepointer),y  ; change the #$20 to #$00  
-@next2:
-  dey
-  bpl @normalize_param
+;  ldy #$A
+;@normalize_param:
+;  lda (fat32_filenamepointer),y
+;  bne @next2
+;  lda #$20
+;  sta (fat32_filenamepointer),y  ; change the #$20 to #$00  
+;@next2:
+;  dey
+;  bpl @normalize_param
 
 ; check for an exact match 
   jsr fat32_is_exact_match
@@ -1035,32 +1036,32 @@ fat32_dir:
 ; reuse the RamDisk variables
 ; fat32_filename      = $BF0
 
-fat32_load_file:
-  ; Open root directory
-  jsr fat32_openroot
+;fat32_load_file:
+;  ; Open root directory
+;  jsr fat32_openroot
 
-  ; Find file by name
-  ldx #<fat32_filename
-  ldy #>fat32_filename
-  jsr fat32_finddirent
-  bcc @foundfile
+;  ; Find file by name
+;  ldx #<fat32_filename
+;  ldy #>fat32_filename
+;  jsr fat32_finddirent
+;  bcc @foundfile
 
-  ; File not found:
-  jsr display_message
-  .byte 10,13,"File Not Found", 10, 13, 0
-  rts
+;  ; File not found:
+;  jsr display_message
+;  .byte 10,13,"File Not Found", 10, 13, 0
+;  rts
 
-@foundfile:
+;@foundfile:
  
-   jsr display_message
-  .byte 10,13,"File found opening", 10, 13, 0
+;   jsr display_message
+;  .byte 10,13,"File found opening", 10, 13, 0
 
-  ; Open file
-  jsr fat32_opendirent
+;  ; Open file
+;  jsr fat32_opendirent
 
-  ; address to write to in fat32_address and fat32_address+1
-  ; Read file contents into buffer
-  jsr fat32_file_read
+;  ; address to write to in fat32_address and fat32_address+1
+;  ; Read file contents into buffer
+;  jsr fat32_file_read
 
-rts
+;rts
 

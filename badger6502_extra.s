@@ -78,17 +78,16 @@ FONTPTR        = $C0
 FONTPTR_H      = $C1
 
 ; starting of 512 byte buffer used by fat32
-fat32_workspace = $600
-fat32_filename = $8F0
+fat32_workspace= $800
 
 ; DOS
-dos_command    = $800   ; command line
-dos_params     = $8EF
-dos_param_4    = $8EE  ; the command
-dos_param_3    = $8ED
-dos_param_2    = $8EC
-dos_param_1    = $8EB
-dos_param_0    = $8EA
+dos_command    = $A00   ; command line
+dos_params     = $AFF
+dos_param_4    = $AFE  ; the command
+dos_param_3    = $AFD
+dos_param_2    = $AFC
+dos_param_1    = $AFB
+dos_param_0    = $AFA
 
 ; TEXT MODE
 TEXT           = $400
@@ -425,10 +424,16 @@ read_char:
 
 print_char:
 display_char:
+    pha
+    phx
+    phy
     jsr tx_char_sync    
     jsr console_add_char
     ;jsr char_to_screen
 @done: 
+    ply
+    plx
+    pla
     rts
 
 display_message:
@@ -439,8 +444,8 @@ display_message:
     bne	@increturn
 
 @nextchar:
-    ldy	#0
-    lda	(MSG_ADDR_LOW),Y		; next message character
+    ;ldy	#0
+    lda	(MSG_ADDR_LOW)		; next message character
     beq	@pushreturnaddr		; done?	yes, exit
     jsr	display_char
 
