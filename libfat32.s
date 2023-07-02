@@ -484,19 +484,32 @@ fat32_opendirent:
   ldy #26
   lda (zp_sd_address),y
   sta fat32_nextcluster
-  sta zp_sd_cd_cluster
   iny
   lda (zp_sd_address),y
   sta fat32_nextcluster+1
-  sta zp_sd_cd_cluster+1
   ldy #20
   lda (zp_sd_address),y
   sta fat32_nextcluster+2
-  sta zp_sd_cd_cluster+2
   iny
   lda (zp_sd_address),y
   sta fat32_nextcluster+3
+
+  ldy #$0B
+  lda (zp_sd_address),Y
+  and #$10
+  beq @skip_cd_cache
+  
+  ; If it's a directory, cache the cluster
+  lda fat32_nextcluster
+  sta zp_sd_cd_cluster
+  lda fat32_nextcluster+1
+  sta zp_sd_cd_cluster+1
+  lda fat32_nextcluster+2
+  sta zp_sd_cd_cluster+2
+  lda fat32_nextcluster+3
   sta zp_sd_cd_cluster+3
+
+@skip_cd_cache:
 
   ; if we're opening a directory entry with 0 cluster, use the root cluster
   lda fat32_nextcluster+3
@@ -616,6 +629,8 @@ fat32_prep_fileparam:
 
 @copyfilename:
   iny
+  cpy #$9
+  beq @copy_extension
   lda (fat32_filenamepointer),y
   beq @done                     ; if we encounter a 0 in the param, we're done
   cmp #$20                      ; if we encounter a space, we're done
@@ -623,10 +638,10 @@ fat32_prep_fileparam:
   cmp #'.'                      ; if we encounter a dot, jump to the extension
   beq @copy_extension      
   sta dos_file_param,y          ; write to the buffer
-  cpy #$7
-  bne @copyfilename
+  bra @copyfilename
 
 @copy_extension:
+  iny
   ldx #$8
 @copy_extension_loop:
   ; y is the index into the dos param 
@@ -637,7 +652,7 @@ fat32_prep_fileparam:
   sta dos_file_param, x
   iny
   inx
-  cpy #$B
+  cpx #$B
   bne @copy_extension_loop
 
 @done:  
@@ -845,6 +860,16 @@ fat32_file_read:
   bne @wholesectorreadloop
 
 @done:
+
+  ; reset the read buffer
+  ; Read another sector
+  lda #<fat32_readbuffer
+  sta fat32_address
+  lda #>fat32_readbuffer
+  sta fat32_address+1
+
+  jsr fat32_open_cd
+
   rts
 
 fat32_start:
@@ -1001,6 +1026,19 @@ fat32_dir:
 ;  jsr fat32_file_read
 
 ;rts
+
+; dump an opened file to the console
+fat32_cat_file:
+@read_loop:
+  jsr fat32_file_readbyte
+  bcs @eof
+  jsr display_char
+  bra @read_loop
+
+@eof:
+  jsr fat32_open_cd
+
+  rts
 
 ; open file and read contents into RAM
 ; reuse the RamDisk variables

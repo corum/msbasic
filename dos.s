@@ -52,6 +52,14 @@ read_command:
 
 ; match with an existing command
 @process_command:
+
+@match_cat:
+    jsr match_command
+    .byte "CAT",0
+    bcs @match_cd
+    jmp cmd_cat
+
+@match_cd:
     jsr match_command
     .byte "CD",0
     bcs @match_cls
@@ -124,25 +132,32 @@ read_command:
 
 cmd_test:    
     ldx dos_param_0
-    inx
-    stx fat32_filenamepointer
-    ldy #>dos_command ; set x and y to point to the command line parameter address
-    sty fat32_filenamepointer+1
-
-    jsr fat32_prep_fileparam
-
+    jsr dos_setfileparam
     jmp newprompt
+
+cmd_cat:
+    ldx dos_param_0
+    jsr dos_setfileparam
+
+    jsr fat32_finddirent
+    bcs @file_not_found_long
+
+    jsr fat32_opendirent
+
+    jsr fat32_cat_file
+    jsr fat32_open_cd
+
+    ;jsr fat32_load_file
+    jmp newprompt
+
+@file_not_found_long:
+    jmp file_not_found
 
 cmd_chdir:
     ;jsr fat32_open_cd
 
     ldx dos_param_0
-    inx
-    stx fat32_filenamepointer
-    ldy #>dos_command ; set x and y to point to the command line parameter address
-    sty fat32_filenamepointer+1
-    
-    jsr fat32_prep_fileparam
+    jsr dos_setfileparam
 
     jsr fat32_finddirent
     bcc @found
@@ -257,24 +272,42 @@ cmd_exit:
     jmp WOZMON
 
 cmd_load:
-    inx
-    stx zp_sd_temp
-    lda #>dos_command
-    sta zp_sd_temp+1
-    clc
-    lda #<dos_command
-    adc zp_sd_temp
-    sta zp_sd_temp       ; zp_sd_temp points to command line parameters
+    ldx dos_param_0
+    jsr dos_setfileparam
 
-    ldx zp_sd_temp      ; set x and y to point to the command line parameter address
-    ldy zp_sd_temp + 1
+    ldx dos_param_1
+    jsr dos_parse_hex_address
+    bcs @invalid_address
+    
+    jsr fat32_finddirent
+    bcs file_not_found
 
+    jsr fat32_opendirent
+
+    lda dos_addr_temp
+    sta fat32_address
+    lda dos_addr_temp+1
+    sta fat32_address+1
+
+    jsr fat32_file_read
+
+    jmp newprompt
+
+@invalid_address:
+    jsr display_message
+    .byte 10, 13, "Invalid Address", 10, 13, 0     
     jmp newprompt
 
 cmd_mount:
     jsr fat32_start
     jmp newprompt
-    
+
+file_not_found:
+    jsr fat32_open_cd
+    jsr display_message
+    .byte 10, 13, "File Not Found", 10, 13, 0
+    jmp newprompt
+
 ;****************************************************************************
 ; STRING COMPARISON
 ; x contains the # of matching chars
@@ -309,7 +342,6 @@ match_command:
     pha				; adjust return	address
     rts
 
-
 ; A contains the char to match
 ; X contains the index into the string
 ; carry bit set if it doesn't match
@@ -321,3 +353,106 @@ match_char:
 @matches:
     rts
 
+dos_setfileparam:
+    phx
+    phy
+    inx
+    stx fat32_filenamepointer
+    ldy #>dos_command ; set x and y to point to the command line parameter address
+    sty fat32_filenamepointer+1    
+    jsr fat32_prep_fileparam
+    ply
+    plx
+    rts
+
+
+; A contains an ascii code, convert to a nyble
+; carry set means invalid input
+dos_convert_hex_nyble:
+    cmp #'0'
+    bcs @gt0
+    bcc @garbage  ; out of range
+
+@gt0:
+    cmp #':'
+    bcc @is_digit  ; in ascii range of '0'-'9'
+    cmp #'A'
+    bcs @gtA   ; >= 'A'
+    bcc @garbage  ; out of range, > '9' and < 'A'
+
+@gtA:
+    cmp #'G'
+    bcs @garbage
+
+@is_alpha:    
+    sec
+    sbc #$37
+    bra @done
+
+@is_digit:
+    sec
+    sbc #$30
+    bra @done
+
+@garbage:
+    sec
+    lda #$00
+    rts
+
+@done:
+    clc
+    rts
+
+; takes pointer to dos command line parameter, reads 4 bytes and converts to hex number
+; stores in dos_addr_temp and dos_addr_temp+1
+; destructive to A and x
+
+dos_parse_hex_address:
+    ; x points to the first byte of the address parameter
+    
+    ; high nyble of high byte
+    inx
+    lda dos_command,x
+    jsr dos_convert_hex_nyble    
+    bcs @error
+    clc
+    asl
+    asl
+    asl
+    asl
+    sta dos_addr_temp + 1
+
+    ; low nyble of high byte
+    inx
+    lda dos_command,x
+    jsr dos_convert_hex_nyble
+    bcs @error
+    ora dos_addr_temp + 1
+    sta dos_addr_temp + 1
+
+    ; high nyble of low byte
+    inx
+    lda dos_command,x
+    jsr dos_convert_hex_nyble
+    bcs @error
+    clc
+    asl
+    asl
+    asl
+    asl
+    sta dos_addr_temp
+
+    ; low nyble of low byte
+    inx
+    lda dos_command,x
+    jsr dos_convert_hex_nyble
+    bcs @error
+    ora dos_addr_temp
+    sta dos_addr_temp
+    rts
+
+@error:
+    lda #$00
+    sta dos_addr_temp
+    sta dos_addr_temp+1
+    rts

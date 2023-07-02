@@ -88,6 +88,7 @@ dos_param_2    = $AFD
 dos_param_1    = $AFC
 dos_param_0    = $AFB
 dos_file_param = $AF0  ; 11 bytes
+dos_addr_temp  = $AEE  ; 2 bytes
 
 ; TEXT MODE
 TEXT           = $400
