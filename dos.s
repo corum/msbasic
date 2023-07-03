@@ -31,6 +31,7 @@ read_command:
 ; walks through the command string, terminated by a null, 5th param
 ; or $80th character
 @parse_command:
+    jsr print_crlf
     lda #$00
     sta dos_params
     sta dos_command,x

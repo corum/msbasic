@@ -152,8 +152,8 @@ sd_writebyte:
   ; Tick the clock 8 times with descending bits on MOSI
   ; SD communication is mostly half-duplex so we ignore anything it sends back here
 
-  jsr print_hex
-  jsr print_space
+  ;jsr print_hex
+  ;jsr print_space
 
   ldx #8                      ; send 8 bits
 
@@ -245,8 +245,8 @@ sd_readsector:
   lda #SD_MOSI
   sta PORTA
 
-  jsr display_message
-  .byte 10,13,"sd_readsector: ", 0
+  ;jsr display_message
+  ;.byte 10,13,"sd_readsector: ", 0
 
   ; Command 17, arg is sector number, crc not checked
   lda #$51                    ; CMD17 - READ_SINGLE_BLOCK
@@ -262,8 +262,8 @@ sd_readsector:
   lda #$01                    ; crc (not checked)
   jsr sd_writebyte
 
-  jsr display_message
-  .byte 10,13,0
+  ;jsr display_message
+  ;.byte 10,13,0
 
   jsr sd_waitresult
   cmp #$00
