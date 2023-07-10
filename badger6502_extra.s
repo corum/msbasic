@@ -81,14 +81,14 @@ FONTPTR_H      = $C1
 fat32_workspace= $800
 
 ; DOS
-dos_command    = $A00  ; command line
-dos_params     = $AFF
-dos_param_3    = $AFE  ; the command
-dos_param_2    = $AFD
-dos_param_1    = $AFC
-dos_param_0    = $AFB
-dos_file_param = $AF0  ; 11 bytes
-dos_addr_temp  = $AEE  ; 2 bytes
+dos_command    = $200  ; command line
+dos_params     = dos_command + $7F
+dos_param_3    = dos_command + $7E  ; the command
+dos_param_2    = dos_command + $7D
+dos_param_1    = dos_command + $7C
+dos_param_0    = dos_command + $7B
+dos_file_param = dos_command + $70  ; 11 bytes
+dos_addr_temp  = dos_command + $6E  ; 2 bytes
 
 ; TEXT MODE
 TEXT           = $400
@@ -261,8 +261,154 @@ MSG_SAVE:
     .byte "SAVED"
     .byte CR,LF,CR,LF,0
 
-
+; load and save for eb6502
 eb_load:
+    ; go get the filename from $200
+    ; start of basic program is at $28,$29 little endian
+    ; end of basic program is at $2E,$2f
+
+    jsr fat32_start
+    jsr parse_basic_filename
+    
+    jsr fat32_finddirent
+    bcs @file_not_found
+
+    jsr fat32_opendirent
+    jsr fat32_basic_load
+    bra @success
+
+@file_not_found:
+    lda     #<MSG_FILENOTFOUND
+    ldy     #>MSG_FILENOTFOUND
+    jsr     STROUT
+    bra     @exit
+
+@success:
+    lda     #<MSG_LOAD
+    ldy     #>MSG_LOAD
+    jsr     STROUT
+
+@exit:
+    jmp     FIX_LINKS
+
+eb_save:
+    pha
+
+    ; go get filename from $200
+    jsr fat32_start
+
+    sec
+    lda $2E ; end of program low byte
+    sbc $28 ; start of program low byte
+    sta fat32_bytesremaining
+    pha
+    lda $2f ; end of program high byte
+    sbc $29 ; end of program low byte
+    sta fat32_bytesremaining+1
+    pha
+    lda #$00
+    sta fat32_bytesremaining+2
+    sta fat32_bytesremaining+3
+
+    jsr parse_basic_filename
+
+    jsr fat32_allocatefile
+
+    pla 
+    sta fat32_bytesremaining + 1
+    pla
+    sta fat32_bytesremaining
+
+    jsr fat32_open_cd
+
+    jsr fat32_dump_diskstats
+    
+    jsr fat32_writedirent
+    bcs @error
+
+    lda $28
+    sta fat32_address
+    ;jsr print_hex
+
+    lda $29
+    sta fat32_address+1
+    ;jsr print_hex
+
+    jsr fat32_file_write
+    bcc @success
+
+@error:
+    lda     #<MSG_FILE_ERROR
+    ldy     #>MSG_FILE_ERROR
+    jsr     STROUT
+    bra     @exit
+
+@success:
+    lda     #<MSG_SAVE
+    ldy     #>MSG_SAVE
+    jsr     STROUT
+
+@exit:
+    pla
+    jmp     FIX_LINKS
+
+
+; parse basic filename
+parse_basic_filename:
+    pha
+    phx
+    phy 
+
+    lda #$00
+    sta SOURCE_LOW
+    lda #$02
+    sta SOURCE_HIGH
+    
+    ldy #$00
+    ldx #$00
+    stx dos_param_0
+
+@find_open_quote:
+    lda (SOURCE_LOW),y
+    iny
+    cmp #'"'
+    bne @find_open_quote
+
+@copy_file_name:
+    lda (SOURCE_LOW),y
+    iny
+    cmp #'"'
+    beq @end_of_string
+    sta dos_command,x
+    inx
+    cpx #$0b
+    bne @copy_file_name
+
+@end_of_string:
+    inx
+    lda #$00
+    sta dos_command, x
+
+    ldy #<dos_command
+    sty fat32_filenamepointer
+    ldy #>dos_command
+    sty fat32_filenamepointer+1    
+
+    ldx #$00
+    jsr fat32_prep_fileparam
+
+    lda #<dos_file_param
+    sta fat32_filenamepointer
+    lda #>dos_file_param
+    sta fat32_filenamepointer+1
+    
+    ply
+    plx
+    pla
+    rts
+   
+; load and save routines for the pico implementation
+eb_load_pico:
     pha
     sta     $C0F1    ; load
     lda     $C0FF    ; get status value
@@ -290,7 +436,7 @@ eb_load:
     pla
     jmp     FIX_LINKS
 
-eb_save:
+eb_save_pico:
     pha
     sta     $C0F0   ; save 
     lda     $C0FF   ; get status value
@@ -445,12 +591,11 @@ display_message:
     bne	@increturn
 
 @nextchar:
-    ;ldy	#0
-    lda	(MSG_ADDR_LOW)		; next message character
-    beq	@pushreturnaddr		; done?	yes, exit
+    lda	(MSG_ADDR_LOW)		    ; next message character
+    beq	@pushreturnaddr		    ; done?	yes, exit
     jsr	display_char
 
-@increturn:					; next address
+@increturn:					    ; next address
     inc	MSG_ADDR_LOW
     bne	@nextchar
     inc	MSG_ADDR_HIGH	   	    ; fix MSB of next address
@@ -509,6 +654,8 @@ print_hex_dword:
     rts
 
 print_hex:
+    phx
+    phy
     pha
     ror
     ror
@@ -519,7 +666,10 @@ print_hex:
     pha
     jsr print_nybble
     pla
+    ply
+    plx
     rts
+
 print_nybble:
     and #15
     cmp #10

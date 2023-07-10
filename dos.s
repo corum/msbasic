@@ -93,8 +93,14 @@ read_command:
 @match_exit:
     jsr match_command
     .byte "EXIT",0
-    bcs @match_load
+    bcs @match_jump
     jmp cmd_exit
+
+@match_jump:
+    jsr match_command
+    .byte "JUMP",0
+    bcs @match_load
+    jmp cmd_jump
 
 @match_load:
     jsr match_command
@@ -190,69 +196,7 @@ cmd_diskstat:
     lda #$00
     sta zp_sd_temp + 1
     
-    jsr display_message
-    .byte 10,13,"fat32_fatstart            $", 0
-    lda #fat32_fatstart
-    sta zp_sd_temp
-    jsr print_hex_dword
-
-    jsr display_message
-    .byte 10,13,"fat32_datastart           $", 0
-    lda #fat32_datastart
-    sta zp_sd_temp
-    jsr print_hex_dword
-
-    jsr display_message
-    .byte 10,13,"fat32_rootcluster         $", 0
-    lda #fat32_rootcluster
-    sta zp_sd_temp
-    jsr print_hex_dword
-
-    jsr display_message
-    .byte 10,13,"fat32_sectorspercluster   $", 0
-    lda fat32_sectorspercluster
-    jsr print_hex
-
-    jsr display_message
-    .byte 10,13,"fat32_pendingsectors      $", 0
-    lda fat32_pendingsectors
-    jsr print_hex
-
-    jsr display_message
-    .byte 10,13,"fat32_address             $", 0
-    lda #fat32_address
-    sta zp_sd_temp
-    jsr print_hex_word
-
-    jsr display_message
-    .byte 10,13,"fat32_nextcluster         $", 0
-    lda #fat32_nextcluster
-    sta zp_sd_temp
-    jsr print_hex_dword
-
-    jsr display_message
-    .byte 10,13,"fat32_bytesremaining      $", 0
-    lda #fat32_bytesremaining
-    sta zp_sd_temp
-    jsr print_hex_dword
-
-    jsr display_message
-    .byte 10,13,"zp_sd_currentsector       $", 0
-    lda #zp_sd_currentsector
-    sta zp_sd_temp
-    jsr print_hex_dword
-
-    jsr display_message
-    .byte 10,13,"zp_sd_cd_cluster          $", 0
-    lda #zp_sd_cd_cluster
-    sta zp_sd_temp
-    jsr print_hex_dword
-
-    jsr display_message
-    .byte 10,13,"zp_sd_address             $", 0
-    lda #zp_sd_cd_cluster
-    sta zp_sd_temp
-    jsr print_hex_word
+    jsr fat32_dump_diskstats
     jmp newprompt
 
 cmd_echo:
@@ -271,6 +215,17 @@ cmd_exit:
     jsr display_message
     .byte 10, 13, "Goodbye!", 10, 13, 0
     jmp WOZMON
+
+cmd_jump:
+    ldx dos_param_0
+    jsr dos_parse_hex_address
+    bcs @invalid_address
+    jmp (dos_addr_temp)
+
+@invalid_address:
+    jsr display_message
+    .byte 10, 13, "Invalid Address", 10, 13, 0     
+    jmp newprompt
 
 cmd_load:
     ldx dos_param_0
@@ -457,3 +412,51 @@ dos_parse_hex_address:
     sta dos_addr_temp
     sta dos_addr_temp+1
     rts
+
+
+; ********************************************************
+; sample code for writing a file
+; ********************************************************
+;nf:
+;  ;jsr refreshpath
+;  ldx #<savemsg
+;  ldy #>savemsg
+;  jsr w_acia_full
+;  ; Calculate file size (end - start)
+;  sec
+;  lda stackaccess
+;  sbc savestart
+;  sta fat32_bytesremaining 
+;  pha
+;  lda stackaccess+1
+;  sbc savestart+1
+;  sta fat32_bytesremaining+1
+;  pha
+;  ; Allocate all the clusters for this file
+;  jsr fat32_allocatefile
+;  ; Refresh
+;  jsr refreshpath
+;  ; Put the filename at fat32_filenamepointer
+;  lda savepoint
+;  sta fat32_filenamepointer
+;  lda savepoint+1
+;  sta fat32_filenamepointer+1 
+;  pla
+;  sta fat32_bytesremaining+1
+;  pla
+;  sta fat32_bytesremaining
+;  ; Write a directory entry for this file
+;  jsr fat32_writedirent
+;  ; Now, to actually write the file...
+;  lda savestart
+;  sta fat32_address
+;  lda savestart+1
+;  sta fat32_address+1
+;  jsr fat32_file_write
+;  ; All Done!
+;  ldx #<ends
+;  ldy #>ends
+;  jsr w_acia_full
+;saveexit:
+;  plx
+;  rts
