@@ -37,7 +37,7 @@
 ; DIR_ENTRY_ATTR_LONG_NAME
 
 zp_fat32_variables      = $30
-fat32_variables         = $A00
+fat32_variables         = $3C0
 
 fat32_readbuffer = fat32_workspace
 

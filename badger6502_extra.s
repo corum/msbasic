@@ -78,7 +78,7 @@ FONTPTR        = $C0
 FONTPTR_H      = $C1
 
 ; starting of 512 byte buffer used by fat32
-fat32_workspace= $800
+fat32_workspace= $BE00
 
 ; DOS
 dos_command    = $200  ; command line
@@ -219,6 +219,20 @@ init:
     jsr WOZMON
     jmp @loop
 
+hires1:
+    pha 
+    lda #$80
+    sta $C043
+    pla
+    rts
+
+hires2:
+    pha
+    lda #$C0
+    sta $C043
+    pla
+    rts
+    
 ; loderunner
 _loderunner:
     lda #2
@@ -401,7 +415,7 @@ parse_basic_filename:
     sta fat32_filenamepointer
     lda #>dos_file_param
     sta fat32_filenamepointer+1
-    
+
     ply
     plx
     pla

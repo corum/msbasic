@@ -19,5 +19,6 @@
         jmp     read_char_async_apple     ;$C10C
         jmp     romdisk_load              ;$C10F
         jmp     dos                       ;$C112
-        jmp     dos                       ;$C115
+        jmp     hires1                    ;$C115
+        jmp     hires2                    ;$C118
 .endif
