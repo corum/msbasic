@@ -23,4 +23,5 @@
         jmp     hires2                    ;$C118
         jmp     read_char_upper           ;$C11B
         jmp     read_char_async           ;$C11E
+        jmp     textmode                  ;$C121
 .endif

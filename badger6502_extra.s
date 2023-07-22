@@ -232,6 +232,13 @@ hires2:
     sta $C043
     pla
     rts
+
+textmode:
+    pha
+    lda #$00
+    sta $C043
+    pla
+    rts
     
 ; loderunner
 _loderunner:
