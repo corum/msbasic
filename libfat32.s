@@ -444,7 +444,7 @@ fat32_seekcluster:
 
   ply ; restore index to the table entry for the cluster
 
-  jsr fat32_dump_clusterinfo
+  ;jsr fat32_dump_clusterinfo
 
   ; See if it's the end of the chain
   ora #$f0
@@ -812,7 +812,7 @@ fat32_allocatefile:
   sta (zp_sd_address),y
   ply
 
-  jsr fat32_dump_clusterinfo
+  ;jsr fat32_dump_clusterinfo
 
   ; Update the FAT
   jsr fat32_updatefat
@@ -863,7 +863,7 @@ fat32_allocatefile:
   sta (zp_sd_address),y
   ply
 
-  jsr fat32_dump_clusterinfo
+  ;jsr fat32_dump_clusterinfo
 
   ; Update the FAT
   jsr fat32_updatefat
@@ -1870,8 +1870,8 @@ fat32_open_cd:
   phx
   phy
 
-  jsr display_message
-  .byte 10,13,"open_cd",0
+  ;jsr display_message
+  ;.byte 10,13,"open_cd",0
 
   ; Seek to first cluster of current directory
   lda zp_sd_cd_cluster

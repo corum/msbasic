@@ -9,6 +9,7 @@
 
 dos:
     jsr _cls
+    jsr fat32_start
 
 newprompt:
     jsr display_message

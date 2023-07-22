@@ -177,8 +177,8 @@ sd_waitresult:
 
 sd_sendcommand:
   ; Debug print which command is being executed
-  jsr display_message
-  .byte "CMD: ", 0
+  ;jsr display_message
+  ;.byte "CMD: ", 0
 
   lda #SD_MOSI           ; pull CS low to begin command
   sta PORTA
@@ -205,14 +205,14 @@ sd_sendcommand:
   jsr sd_waitresult
   pha
 
-  jsr display_message
-  .byte "{", 0
+  ;jsr display_message
+  ;.byte "{", 0
 
   ; Debug print the result code
-  jsr print_hex
+  ;jsr print_hex
 
-  jsr display_message
-  .byte "}", 10, 13, 0
+  ;jsr display_message
+  ;.byte "}", 10, 13, 0
 
   ; End command
   lda #SD_CS | SD_MOSI   ; set CS high again
@@ -232,29 +232,31 @@ sd_readsector:
   lda #SD_MOSI
   sta PORTA
 
-  jsr display_message
-  .byte 10,13,"sd_readsect : ", 0
+  ;jsr display_message
+  ;.byte 10,13,"read : ", 0
 
   ; Command 17, arg is sector number, crc not checked
   lda #$51                    ; CMD17 - READ_SINGLE_BLOCK
+  ;jsr print_hex
   jsr sd_writebyte
-  jsr print_hex
   lda zp_sd_currentsector+3   ; sector 24:31
+  ;jsr print_space
+  ;jsr print_hex
   jsr sd_writebyte
-  jsr print_hex
   lda zp_sd_currentsector+2   ; sector 16:23
+  ;jsr print_hex
   jsr sd_writebyte
-  jsr print_hex
   lda zp_sd_currentsector+1   ; sector 8:15
+  ;jsr print_hex
   jsr sd_writebyte
-  jsr print_hex
   lda zp_sd_currentsector     ; sector 0:7
+  ;jsr print_hex
+  ;jsr print_space
   jsr sd_writebyte
-  jsr print_hex
   lda #$01                    ; crc (not checked)
+  ;jsr print_hex
   jsr sd_writebyte
-  jsr print_hex
-  jsr print_crlf
+  ;jsr print_crlf
 
   ;jsr fat32_dump_fat32_address
 
@@ -310,28 +312,30 @@ sd_fail:
   lda #SD_MOSI
   sta PORTA
 
-  jsr display_message
-  .byte 10,13,"sd_writesect: ", 0
+  ;jsr display_message
+  ;.byte 10,13,"write: ", 0
 
   ; Command 24, arg is sector number, crc not checked
   lda #$58                    ; CMD24 - WRITE_BLOCK
+  ;jsr print_hex
   jsr sd_writebyte
-  jsr print_hex
   lda zp_sd_currentsector+3   ; sector 24:31
+  ;jsr print_space
+  ;jsr print_hex
   jsr sd_writebyte
-  jsr print_hex
   lda zp_sd_currentsector+2   ; sector 16:23
+  ;jsr print_hex
   jsr sd_writebyte
-  jsr print_hex
   lda zp_sd_currentsector+1   ; sector 8:15
+  ;jsr print_hex
   jsr sd_writebyte
-  jsr print_hex
   lda zp_sd_currentsector     ; sector 0:7
+  ;jsr print_hex
   jsr sd_writebyte
-  jsr print_hex
+  ;jsr print_space
   lda #$01                    ; crc (not checked)
+  ;jsr print_hex
   jsr sd_writebyte
-  jsr print_hex
 
   ;jsr fat32_dump_fat32_address
   
