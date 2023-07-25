@@ -41,13 +41,13 @@ EASTER_EGG:
         bne     L3628
         sta     LINNUM
         tay
-        lda     #$80
+        lda     #$04
         sta     LINNUM+1
 LD758:
         ldx     #$0A
 LD75A:
         lda     MICROSOFT-1,x
-        and     #$3F
+        and     #$7F
         sta     (LINNUM),y
         iny
         bne     LD766

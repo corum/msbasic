@@ -514,7 +514,7 @@ QT_BASIC:
   .ifdef CBM2
         .byte   CR, LF
         .byte   "### COMMODORE BASIC ###"
-        .byte   CR,LF,CR,LF,0
+        .byte   CR,LF,0
   .endif
   .ifdef APPLE
         .byte   LF,CR,LF

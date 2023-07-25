@@ -119,15 +119,15 @@ POLY_SIN:
   .ifndef CONFIG_11
 ; no easter egg text before BASIC 1.1
   .elseif !.def(CONFIG_2A)
-; ASCII encoded easter egg
+; PET encoded easter egg text since CBM2
 MICROSOFT:
         .byte   $A6,$D3,$C1,$C8,$D4,$C8,$D5,$C4
         .byte   $CE,$CA
   .else
-; PET encoded easter egg text since CBM2
+; ASCII encoded easter egg
 MICROSOFT:
-        .byte   $A1,$54,$46,$8F,$13,$8F,$52,$43
-        .byte   $89,$CD
+        .byte   $A1,$54,$46,$CF,$53,$CF,$52,$43
+        .byte   $C9,$CD
   .endif
 .endif
 
