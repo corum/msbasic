@@ -220,13 +220,8 @@ cmd_exit:
 cmd_jump:
     ldx dos_param_0
     jsr dos_parse_hex_address
-    bcs @invalid_address
+    bcs invalid_address
     jmp (dos_addr_temp)
-
-@invalid_address:
-    jsr display_message
-    .byte 10, 13, "Invalid Address", 10, 13, 0     
-    jmp newprompt
 
 cmd_load:
     ldx dos_param_0
@@ -234,7 +229,7 @@ cmd_load:
 
     ldx dos_param_1
     jsr dos_parse_hex_address
-    bcs @invalid_address
+    bcs invalid_address
     
     jsr fat32_finddirent
     bcs file_not_found
@@ -248,6 +243,11 @@ cmd_load:
 
     jsr fat32_file_read
 
+    jmp newprompt
+
+invalid_address:
+    jsr display_message
+    .byte 10, 13, "Invalid Address", 10, 13, 0     
     jmp newprompt
 
 @found:
