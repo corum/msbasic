@@ -469,6 +469,7 @@ display_message:
     pla
     sta	MSG_ADDR
     pla
+    phy
     sta	MSG_ADDR+1          ; get return address off the stack
     bne	@increturn
 
@@ -485,6 +486,7 @@ display_message:
     bne	@nextchar
 
 @pushreturnaddr:
+    ply
     lda	MSG_ADDR+1
     pha
     lda	MSG_ADDR

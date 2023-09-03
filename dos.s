@@ -77,10 +77,11 @@ cmd_chdir:
     jmp newprompt
 
 @found:
+    jsr fat32_opendirent
+
     jsr display_message
     .byte 10, 13, "Directory found", 10, 13, 0
 
-    jsr fat32_opendirent
     jmp newprompt
 
 ; x contains the # of matching chars
