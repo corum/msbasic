@@ -78,19 +78,23 @@ FONTPTR        = $C0
 FONTPTR_H      = $C1
 
 ; starting of 512 byte buffer used by fat32
-fat32_workspace     = $900
-fat32_filename      = $BF0
-fat32_destaddr_low  = $BFE
-fat32_destaddr_high = $BFF
+fat32_workspace= $BE00
 
-; DOS addresses
-dos_command        = $BC0
+; DOS
+dos_command    = $200  ; command line
+dos_params     = dos_command + $7F
+dos_param_3    = dos_command + $7E  ; the command
+dos_param_2    = dos_command + $7D
+dos_param_1    = dos_command + $7C
+dos_param_0    = dos_command + $7B
+dos_file_param = dos_command + $70  ; 11 bytes
+dos_addr_temp  = dos_command + $6E  ; 2 bytes
+
 ; TEXT MODE
-TEXT           = $0400
+TEXT           = $400
 CURSOR_ADDR    = $C2
 CURSOR_ADDR_H  = $C3
 CHAR_DRAW      = $C4
-MSG_ADDR       = $C5 ; 2 bytes
 
 ;ROMDISK
 RD_LOW         = $C040
@@ -108,6 +112,9 @@ RD_BYTES_HIGH  = $BF
 
 DEST_LOW       = $C5
 DEST_HIGH      = $C6
+
+MSG_ADDR_LOW   = $C7
+MSG_ADDR_HIGH  = $C8
 
 ; PS/2 keyboard memory locations
 KBSTATE        = $CA
@@ -133,9 +140,19 @@ PS2_KEYS       = $01
 PS2_PARITY     = $02
 PS2_STOP       = $03
 
-.segment "OS"
-.include "libfat32.s"
-.include "dos.s"
+via_init:
+    lda #%11111111          ; Set all pins on port B to output
+    sta DDRB
+
+    lda #PORTA_OUTPUTPINS   ; Set various pins on port A to output
+    sta DDRA
+
+    lda #CFGCA
+    sta PCR        ; configure CA2 for negative edge independent interrupt, for PS/2
+
+    lda #$83
+    sta IER        ; enable interrupts for CA1 and CA2
+    rts
 
 ;CODE
 init:
@@ -202,46 +219,266 @@ init:
     jsr WOZMON
     jmp @loop
 
-
-via_init:
-    lda #%11111111          ; Set all pins on port B to output
-    sta DDRB
-
-    lda #PORTA_OUTPUTPINS   ; Set various pins on port A to output
-    sta DDRA
-
-    lda #CFGCA
-    sta PCR        ; configure CA2 for negative edge independent interrupt, for PS/2
-
-    lda #$83
-    sta IER        ; enable interrupts for CA1 and CA2
+hires1:
+    pha 
+    lda #$80
+    sta $C043
+    pla
     rts
 
+hires2:
+    pha
+    lda #$C0
+    sta $C043
+    pla
+    rts
 
-; Display startup message
-ShowStartMsg:
-;    jsr tx_startup_message
-     rts
+textmode:
+    pha
+    lda #$00
+    sta $C043
+    pla
+    rts
+    
+; loderunner
+_loderunner:
+    lda #2
+    sta DEST_HIGH
+    sta SOURCE_HIGH
 
-MSG_SYNATAXERROR:
-    .byte "SYNTAX ERROR"
-    .byte CR,LF,CR,LF,0
+    stz DEST_LOW
+    stz SOURCE_LOW
+    stz RD_BYTES_LOW
+
+    lda #$BE
+    sta RD_BYTES_HIGH
+
+    stz RD_LOW
+    stz RD_HIGH
+    stz RD_BANK
+
+    jsr romdisk_load
+    jmp $6000
+
+
+
+.segment "OS"
+.include "libfat32.s"
+.include "dos.s"
 
 MSG_FILENOTFOUND:
     .byte "FILE NOT FOUND"
-    .byte CR,LF,CR,LF,0
+    .byte CR,LF,0
 
 MSG_FILE_ERROR:
     .byte "FILE ERROR"
-    .byte CR,LF,CR,LF,0
+    .byte CR,LF,0
 
 MSG_LOAD:
     .byte "LOADED"
-    .byte CR,LF,CR,LF,0
+    .byte CR,LF,0
 
 MSG_SAVE:
     .byte "SAVED"
     .byte CR,LF,CR,LF,0
+
+; load and save for eb6502
+eb_load:
+    ; go get the filename from $200
+    ; start of basic program is at $28,$29 little endian
+    ; end of basic program is at $2E,$2f
+
+    jsr fat32_start
+    jsr parse_basic_filename
+    
+    jsr fat32_finddirent
+    bcs @file_not_found
+
+    jsr fat32_opendirent
+    jsr fat32_basic_load
+    bra @success
+
+@file_not_found:
+    lda     #<MSG_FILENOTFOUND
+    ldy     #>MSG_FILENOTFOUND
+    jsr     STROUT
+    bra     @exit
+
+@success:
+    lda     #<MSG_LOAD
+    ldy     #>MSG_LOAD
+    jsr     STROUT
+
+@exit:
+    jmp     FIX_LINKS
+
+eb_save:
+    pha
+
+    ; go get filename from $200
+    jsr fat32_start
+
+    sec
+    lda $2E ; end of program low byte
+    sbc $28 ; start of program low byte
+    sta fat32_bytesremaining
+    pha
+    lda $2f ; end of program high byte
+    sbc $29 ; end of program low byte
+    sta fat32_bytesremaining+1
+    pha
+    lda #$00
+    sta fat32_bytesremaining+2
+    sta fat32_bytesremaining+3
+
+    jsr parse_basic_filename
+
+    jsr fat32_allocatefile
+
+    pla 
+    sta fat32_bytesremaining + 1
+    pla
+    sta fat32_bytesremaining
+
+    jsr fat32_open_cd
+
+    jsr fat32_dump_diskstats
+    
+    jsr fat32_writedirent
+    bcs @error
+
+    lda $28
+    sta fat32_address
+    ;jsr print_hex
+
+    lda $29
+    sta fat32_address+1
+    ;jsr print_hex
+
+    jsr fat32_file_write
+    bcc @success
+
+@error:
+    lda     #<MSG_FILE_ERROR
+    ldy     #>MSG_FILE_ERROR
+    jsr     STROUT
+    bra     @exit
+
+@success:
+    lda     #<MSG_SAVE
+    ldy     #>MSG_SAVE
+    jsr     STROUT
+
+@exit:
+    pla
+    jmp     FIX_LINKS
+
+
+; parse basic filename
+parse_basic_filename:
+    pha
+    phx
+    phy 
+
+    lda #$00
+    sta SOURCE_LOW
+    lda #$02
+    sta SOURCE_HIGH
+    
+    ldy #$00
+    ldx #$00
+    stx dos_param_0
+
+@find_open_quote:
+    lda (SOURCE_LOW),y
+    iny
+    cmp #'"'
+    bne @find_open_quote
+
+@copy_file_name:
+    lda (SOURCE_LOW),y
+    iny
+    cmp #'"'
+    beq @end_of_string
+    sta dos_command,x
+    inx
+    cpx #$0b
+    bne @copy_file_name
+
+@end_of_string:
+    inx
+    lda #$00
+    sta dos_command, x
+
+    ldy #<dos_command
+    sty fat32_filenamepointer
+    ldy #>dos_command
+    sty fat32_filenamepointer+1    
+
+    ldx #$00
+    jsr fat32_prep_fileparam
+
+    lda #<dos_file_param
+    sta fat32_filenamepointer
+    lda #>dos_file_param
+    sta fat32_filenamepointer+1
+
+    ply
+    plx
+    pla
+    rts
+   
+; load and save routines for the pico implementation
+eb_load_pico:
+    pha
+    sta     $C0F1    ; load
+    lda     $C0FF    ; get status value
+    beq     @success
+
+    cmp     #2
+    bne     @foundfile
+
+    lda     #<MSG_FILENOTFOUND
+    ldy     #>MSG_FILENOTFOUND
+    jsr     STROUT
+
+@foundfile:
+    lda     #<MSG_FILE_ERROR
+    ldy     #>MSG_FILE_ERROR
+    jsr     STROUT
+    bra     @exit
+
+@success:
+    lda     #<MSG_LOAD
+    ldy     #>MSG_LOAD
+    jsr     STROUT
+
+@exit:
+    pla
+    jmp     FIX_LINKS
+
+eb_save_pico:
+    pha
+    sta     $C0F0   ; save 
+    lda     $C0FF   ; get status value
+    
+    beq     @success
+
+    lda     #<MSG_FILE_ERROR
+    ldy     #>MSG_FILE_ERROR
+    jsr     STROUT
+    bra     @exit
+
+@success:
+    lda     #<MSG_SAVE
+    ldy     #>MSG_SAVE
+    jsr     STROUT
+
+@exit:
+    pla
+    jmp     FIX_LINKS
+
+
 
 wdc_pause:
     phx
@@ -279,110 +516,6 @@ tx_char_sync:
 
     rts
 
-;rx_char_sync:
-;    lda A_STS              ; get status byte
-;    and #$08               ; max rx buffer status flag
-;    beq rx_char_sync       ; loop if rx buffer is empty   
-;    lda A_RXD              ; get byte from ACIA
-;    rts
-
-;rx_char_sync_nowait:
-;    lda A_STS              ; get status byte
-;    and #$08               ; max rx buffer status flag
-;    beq @nochar            ; exit with a null if the buffer is empty  
-;    lda A_RXD              ; get byte from ACIA
-;    bra @exit
-;@nochar:
-;    lda #$00
-;    bra @exit
-
-;@exit:
-;    rts
-
-
-;tx_backspace:
-;    pha
-;    phx
-;    ldx #$FF
-;@loop:
-;    inx
-;    lda Backspace,X
-;    beq @exit
-;    jsr MONCOUT
-;    bne @loop
-;@exit:
-;    plx
-;    pla
-;    rts
-
-eb_load:
-    pha
-    sta     $C0F1    ; load
-    lda     $C0FF    ; get status value
-    beq     @success
-
-    cmp     #2
-    bne     @foundfile
-
-    lda     #<MSG_FILENOTFOUND
-    ldy     #>MSG_FILENOTFOUND
-    jsr     STROUT
-
-@foundfile:
-    lda     #<MSG_FILE_ERROR
-    ldy     #>MSG_FILE_ERROR
-    jsr     STROUT
-    bra     @exit
-
-@success:
-    lda     #<MSG_LOAD
-    ldy     #>MSG_LOAD
-    jsr     STROUT
-
-@exit:
-    pla
-    jmp     FIX_LINKS
-
-eb_save:
-    pha
-    sta     $C0F0   ; save 
-    lda     $C0FF   ; get status value
-    
-    beq     @success
-
-    lda     #<MSG_FILE_ERROR
-    ldy     #>MSG_FILE_ERROR
-    jsr     STROUT
-    bra     @exit
-
-@success:
-    lda     #<MSG_SAVE
-    ldy     #>MSG_SAVE
-    jsr     STROUT
-
-@exit:
-    pla
-    jmp     FIX_LINKS
-
-; loderunner
-_loderunner:
-    lda #2
-    sta DEST_HIGH
-    sta SOURCE_HIGH
-
-    stz DEST_LOW
-    stz SOURCE_LOW
-    stz RD_BYTES_LOW
-
-    lda #$BE
-    sta RD_BYTES_HIGH
-
-    stz RD_LOW
-    stz RD_HIGH
-    stz RD_BANK
-
-    jsr romdisk_load
-    jmp $6000
 
 ;==========================================================================
 ; Keyboard
@@ -414,10 +547,10 @@ read_char_async:
 @exit:
     rts
 
-read_char_echo:
-    jsr read_char
-    jsr display_char
-    rts
+;read_char_echo:
+;    jsr read_char
+;    jsr display_char
+;    rts
 
 read_char_upper_echo:
     jsr read_char_upper
@@ -459,37 +592,40 @@ read_char:
 
 print_char:
 display_char:
+    pha
+    phx
+    phy
     jsr tx_char_sync    
     jsr console_add_char
     ;jsr char_to_screen
 @done: 
+    ply
+    plx
+    pla
     rts
 
 display_message:
     pla
-    sta	MSG_ADDR
+    sta	MSG_ADDR_LOW
     pla
-    phy
-    sta	MSG_ADDR+1          ; get return address off the stack
+    sta	MSG_ADDR_HIGH          ; get return address off the stack
     bne	@increturn
 
 @nextchar:
-    ldy	#0
-    lda	(MSG_ADDR),Y		; next message character
-    beq	@pushreturnaddr		; done?	yes, exit
+    lda	(MSG_ADDR_LOW)		    ; next message character
+    beq	@pushreturnaddr		    ; done?	yes, exit
     jsr	display_char
 
-@increturn:					; next address
-    inc	MSG_ADDR
+@increturn:					    ; next address
+    inc	MSG_ADDR_LOW
     bne	@nextchar
-    inc	MSG_ADDR+1	   	    ; fix MSB of next address
+    inc	MSG_ADDR_HIGH	   	    ; fix MSB of next address
     bne	@nextchar
 
 @pushreturnaddr:
-    ply
-    lda	MSG_ADDR+1
+    lda	MSG_ADDR_HIGH
     pha
-    lda	MSG_ADDR
+    lda	MSG_ADDR_LOW
     pha				; adjust return	address
     rts
 
@@ -508,19 +644,53 @@ print_space:
     jsr print_char
     pla
     rts
-    
-print_hex:
+
+    ; address stored in zp_sd_temp
+print_hex_word:
     pha
-    ror
-    ror
-    ror
-    ror
-    jsr print_nybble
-    pla
-    pha
-    jsr print_nybble
+    phy
+    ldy #1
+    lda (zp_sd_temp),y
+    jsr print_hex
+    dey
+    lda (zp_sd_temp),y
+    jsr print_hex
+
+    ply
     pla
     rts
+
+    ; address stored in zp_sd_temp
+print_hex_dword:
+    pha
+    phy
+    ldy #3
+@loopdword:
+    lda (zp_sd_temp),y
+    jsr print_hex
+    dey
+    bpl @loopdword
+    ply
+    pla
+    rts
+
+print_hex:
+    phx
+    phy
+    pha
+    ror
+    ror
+    ror
+    ror
+    jsr print_nybble
+    pla
+    pha
+    jsr print_nybble
+    pla
+    ply
+    plx
+    rts
+
 print_nybble:
     and #15
     cmp #10
@@ -1083,7 +1253,8 @@ scroll_console:
     rts
 
 ; DRAW SCREEN
-draw_screen:
+; software text rendering code
+;draw_screen:
     pha
     phy
     phx
@@ -1095,286 +1266,287 @@ draw_screen:
     pha
 
     ldx #$00
-@loopx:
-    stx CURSOR_Y
-    lda eb_text_msb, x
-    sta DEST_HIGH
-    lda eb_text_lsb, x
-    sta DEST_LOW
-    ldy #$00
+;@loopx:
+;    stx CURSOR_Y
+;    lda eb_text_msb, x
+;    sta DEST_HIGH
+;    lda eb_text_lsb, x
+;    sta DEST_LOW
+;    ldy #$00
 
-@loopy: 
-    sty CURSOR_X
-    lda (DEST_LOW),Y
-    sta CHAR_DRAW
-    jsr draw_char
+;@loopy: 
+;    sty CURSOR_X
+;    lda (DEST_LOW),Y
+;    sta CHAR_DRAW
+;    jsr draw_char
 
-;    inc DEST_LOW
-;    bne @skipinc
-;    inc DEST_HIGH
-;@skipinc:
-    iny
-    cpy #$28
-    bne @loopy
+;;    inc DEST_LOW
+;;    bne @skipinc
+;;    inc DEST_HIGH
+;;@skipinc:
+;    iny
+;    cpy #$28
+;    bne @loopy
 
-    inx
-    cpx #$19
-    bne @loopx
+;    inx
+;    cpx #$19
+;    bne @loopx
 
-@done:
-    ; restore the cursor
-    pla
-    sta CURSOR_Y
-    pla
-    sta CURSOR_X
-    plx
-    ply
-    pla    
+;@done:
+;    ; restore the cursor
+;    pla
+;    sta CURSOR_Y
+;    pla
+;    sta CURSOR_X
+;    plx
+;    ply
+;    pla    
 
-    rts
+;    rts
 
 ; DRAW CHARACTER
-draw_char:
-    pha
-    phx
-    phy
+; software character rendering
+;draw_char:
+;    pha
+;    phx
+;    phy
 
 
-    lda CHAR_DRAW
-    lsr
-    lsr
-    lsr
-    lsr
-    lsr
-    clc
-    adc #>font8x8
-    sta FONTPTR_H
+;    lda CHAR_DRAW
+;    lsr
+;    lsr
+;    lsr
+;    lsr
+;    lsr
+;    clc
+;    adc #>font8x8
+;    sta FONTPTR_H
 
-    lda CHAR_DRAW
-    asl
-    asl
-    asl
-    clc
-    adc #<font8x8
-    sta FONTPTR
+;    lda CHAR_DRAW
+;    asl
+;    asl
+;    asl
+;    clc
+;    adc #<font8x8
+;    sta FONTPTR
 
 
-    clc
-    lda CURSOR_Y
-    asl
-    asl
-    asl
-    tay
+;    clc
+;    lda CURSOR_Y
+;    asl
+;    asl
+;    asl
+;    tay
 
-    ldx #$00
-@loopy:                  ; loop through 8 lines per char
-    lda (HIRESPAGE),y
-    sta ORIGIN_H
-    lda eb_hires_lsb,y
+;    ldx #$00
+;@loopy:                  ; loop through 8 lines per char
+;    lda (HIRESPAGE),y
+;    sta ORIGIN_H
+;    lda eb_hires_lsb,y
 
-    clc
-    adc CURSOR_X
-    bcc @skipcarry
-    inc ORIGIN_H
-@skipcarry:
-    sta ORIGIN_L
+;    clc
+;    adc CURSOR_X
+;    bcc @skipcarry
+;    inc ORIGIN_H
+;@skipcarry:
+;    sta ORIGIN_L
     
-    lda (FONTPTR)
-    sta (ORIGIN_L)
+;    lda (FONTPTR)
+;    sta (ORIGIN_L)
 
-    inc FONTPTR
-    bne @skipcarry2
-    inc FONTPTR_H
-@skipcarry2:
-    iny
-    inx
-    cpx #$8
-    bne @loopy
+;    inc FONTPTR
+;    bne @skipcarry2
+;    inc FONTPTR_H
+;@skipcarry2:
+;    iny
+;    inx
+;    cpx #$8
+;    bne @loopy
 
-    ply
-    plx
-    pla
-    rts
+;    ply
+;    plx
+;    pla
+;    rts
 
 
 ; ============================================================================================
 ; graphics tests
 ; ============================================================================================
 
-linetests:
-    jsr linetest1
-    jsr cls
-    jsr linetest2
-    jsr cls
-    jsr linetest3
-    rts
+;linetests:
+;    jsr linetest1
+;    jsr cls
+;    jsr linetest2
+;    jsr cls
+;    jsr linetest3
+;    rts
 
-linetest1:
-    stz X1
-    stz X1_H
+;linetest1:
+;    stz X1
+;    stz X1_H
 
-    stz X2_H
-    stz Y1
+;    stz X2_H
+;    stz Y1
 
-    ldy #$C7
-    ldx #$01   
-    sty Y2
-@effectx:
-    ;inc DRAW_COLOR
-    stx X2
-    jsr draw_line
-    inx
-    bne @effectx
+;    ldy #$C7
+;    ldx #$01   
+;    sty Y2
+;@effectx:
+;    ;inc DRAW_COLOR
+;    stx X2
+;    jsr draw_line
+;    inx
+;    bne @effectx
+;
+;    inc X2_H
+;@effectx2:
+;    ;inc DRAW_COLOR
+;    stx X2
+;    jsr draw_line
+;    inx
+;    cpx #$3F
+;    bne @effectx2
+;@donex:
+;    dey
+;    dex
+;    stx X2
 
-    inc X2_H
-@effectx2:
-    ;inc DRAW_COLOR
-    stx X2
-    jsr draw_line
-    inx
-    cpx #$3F
-    bne @effectx2
-@donex:
-    dey
-    dex
-    stx X2
-
-@effecty:
-    ;inc DRAW_COLOR
-    sty Y2
-    jsr draw_line
-    dey
-    bne @effecty
-    rts
-
-
-linetest2:
-    pha
-    phx
-    phy
+;@effecty:
+;    ;inc DRAW_COLOR
+;    sty Y2
+;    jsr draw_line
+;    dey
+;    bne @effecty
+;    rts
 
 
-    ; 0,0 - 255,128
-    lda #$02
-    sta DRAW_COLOR
+;linetest2:
+;    pha
+;    phx
+;    phy
 
-    stz X1
-    stz X1_H
-    stz Y1        ; Origin is (0,0)
+
+;    ; 0,0 - 255,128
+;    lda #$02
+;    sta DRAW_COLOR
+
+;    stz X1
+;    stz X1_H
+;    stz Y1        ; Origin is (0,0)
     
-    lda #$01
-    sta X2_H
+;    lda #$01
+;    sta X2_H
 
-    lda #$3F
-    sta X2    
+;    lda #$3F
+;    sta X2    
 
-    lda #$C7
-    sta Y2        ; Destination (320x200)
+;    lda #$C7
+;    sta Y2        ; Destination (320x200)
 
-    jsr draw_line
+;    jsr draw_line
 
     ; 0,128 - 255,0
-    lda #$04
-    sta DRAW_COLOR
+;    lda #$04
+;    sta DRAW_COLOR
 
-    stz X1_H
-    stz X1       ; (0, 200)
-    lda #$C7
-    sta Y1
+;    stz X1_H
+;    stz X1       ; (0, 200)
+;    lda #$C7
+;    sta Y1
 
-    lda #$01
-    sta X2_H
-    lda #$3F
-    sta X2        ; (320, 0)
+;    lda #$01
+;    sta X2_H
+;    lda #$3F
+;    sta X2        ; (320, 0)
 
-    stz Y2
-    jsr draw_line
+;    stz Y2
+;    jsr draw_line
 
 
-    ; draw backwards
+;    ; draw backwards
 
-    ; 320,64 - 0,32 
+;    ; 320,64 - 0,32 
 
-    lda #$01
-    sta X2_H
+;    lda #$01
+;    sta X2_H
 
-    lda #$3F
-    sta X2    
+;    lda #$3F
+;    sta X2    
 
-    lda #$40
-    sta Y2        ; Origin (320x64)
+;    lda #$40
+;    sta Y2        ; Origin (320x64)
 
-    ;lda #$02
-    ;sta DRAW_COLOR
+;    ;lda #$02
+;    ;sta DRAW_COLOR
 
-    stz X1
-    stz X1_H
+;    stz X1
+;    stz X1_H
 
-    lda #$20
-    sta Y1        ; Dest is (0,32)
+;    lda #$20
+;    sta Y1        ; Dest is (0,32)
     
 
-    jsr draw_line
+;    jsr draw_line
 
-    ply
-    plx
-    pla
-    rts
+;    ply
+;    plx
+;    pla
+;    rts
 
-linetest3:
-    pha
-    phx
-    phy
+;linetest3:
+;    pha
+;    phx
+;    phy
 
-    ;lda #$03
-    ;sta DRAW_COLOR
+;    ;lda #$03
+;    ;sta DRAW_COLOR
 
-    stz X1
-    stz X1_H
-    stz X2
-    stz X2_H
-    stz Y2
-    lda #$C7
-    sta Y1
+;    stz X1
+;    stz X1_H
+;    stz X2
+;    stz X2_H
+;    stz Y2
+;    lda #$C7
+;    sta Y1
 
-@loop:    
+;@loop:    
 
-    inc DRAW_COLOR
-    jsr draw_line
+;    inc DRAW_COLOR
+;    jsr draw_line
 
-@xlow:    
-    clc
-    lda X2
-    adc #$08
-    sta X2
-    bcs @xhigh
+;@xlow:    
+;    clc
+;    lda X2
+;    adc #$08
+;    sta X2
+;    bcs @xhigh
     
-    cmp #$3F
-    beq @xcheck
-    bra @y
+;    cmp #$3F
+;    beq @xcheck
+;    bra @y
 
-@xhigh:
-    inc X2_H
+;@xhigh:
+;    inc X2_H
 
-@y:
-    sec
-    lda Y1
-    sbc #$06
-    bcc @exit
-    sta Y1    
-    bra @loop
+;@y:
+;    sec
+;    lda Y1
+;    sbc #$06
+;    bcc @exit
+;    sta Y1    
+;    bra @loop
 
-@xcheck:
-    lda X2_H
-    lsr
-    bcc @loop
+;@xcheck:
+;    lda X2_H
+;    lsr
+;    bcc @loop
 
-@exit:
+;@exit:
 
-    ply
-    plx
-    pla
-    rts
+;    ply
+;    plx
+;    pla
+;    rts
 
 set_hires_page1:
     pha
@@ -1877,263 +2049,263 @@ eb_text_lsb:
 
 
 .segment "FONT"
-font8x8:
-        .byte $00,$00,$00,$00,$00,$00,$00,$00      ;  0
-        .byte $7e,$81,$a5,$81,$bd,$99,$81,$7e      ;  1
-        .byte $7e,$ff,$db,$ff,$c3,$e7,$ff,$7e      ;  2
-        .byte $6c,$fe,$fe,$fe,$7c,$38,$10,$00      ;  3
-        .byte $10,$38,$7c,$fe,$7c,$38,$10,$00      ;  4
-        .byte $38,$7c,$38,$fe,$fe,$d6,$10,$38      ;  5
-        .byte $10,$38,$7c,$fe,$fe,$7c,$10,$38      ;  6
-        .byte $00,$00,$18,$3c,$3c,$18,$00,$00      ;  7
-        .byte $ff,$ff,$e7,$c3,$c3,$e7,$ff,$ff      ;  8
-        .byte $00,$3c,$66,$42,$42,$66,$3c,$00      ;  9
-        .byte $ff,$c3,$99,$bd,$bd,$99,$c3,$ff      ;  10
-        .byte $0f,$07,$0f,$7d,$cc,$cc,$cc,$78      ;  11
-        .byte $3c,$66,$66,$66,$3c,$18,$7e,$18      ;  12
-        .byte $3f,$33,$3f,$30,$30,$70,$f0,$e0      ;  13
-        .byte $7f,$63,$7f,$63,$63,$67,$e6,$c0      ;  14
-        .byte $18,$db,$3c,$e7,$e7,$3c,$db,$18      ;  15
-        .byte $80,$e0,$f8,$fe,$f8,$e0,$80,$00      ;  16
-        .byte $02,$0e,$3e,$fe,$3e,$0e,$02,$00      ;  17
-        .byte $18,$3c,$7e,$18,$18,$7e,$3c,$18      ;  18
-        .byte $66,$66,$66,$66,$66,$00,$66,$00      ;  19
-        .byte $7f,$db,$db,$7b,$1b,$1b,$1b,$00      ;  20
-        .byte $3e,$61,$3c,$66,$66,$3c,$86,$7c      ;  21
-        .byte $00,$00,$00,$00,$7e,$7e,$7e,$00      ;  22
-        .byte $18,$3c,$7e,$18,$7e,$3c,$18,$ff      ;  23
-        .byte $18,$3c,$7e,$18,$18,$18,$18,$00      ;  24
-        .byte $18,$18,$18,$18,$7e,$3c,$18,$00      ;  25
-        .byte $00,$18,$0c,$fe,$0c,$18,$00,$00      ;  26
-        .byte $00,$30,$60,$fe,$60,$30,$00,$00      ;  27
-        .byte $00,$00,$c0,$c0,$c0,$fe,$00,$00      ;  28
-        .byte $00,$24,$66,$ff,$66,$24,$00,$00      ;  29
-        .byte $00,$18,$3c,$7e,$ff,$ff,$00,$00      ;  30
-        .byte $00,$ff,$ff,$7e,$3c,$18,$00,$00      ;  31
-        .byte $00,$00,$00,$00,$00,$00,$00,$00      ;  32, " "
-        .byte $18,$3c,$3c,$18,$18,$00,$18,$00      ;  33, "!"
-        .byte $66,$66,$24,$00,$00,$00,$00,$00      ;  34, """
-        .byte $6c,$6c,$fe,$6c,$fe,$6c,$6c,$00      ;  35, "#"
-        .byte $18,$3e,$60,$3c,$06,$7c,$18,$00      ;  36, "$"
-        .byte $00,$c6,$cc,$18,$30,$66,$c6,$00      ;  37, "%"
-        .byte $38,$6c,$38,$76,$dc,$cc,$76,$00      ;  38, "&"
-        .byte $18,$18,$30,$00,$00,$00,$00,$00      ;  39, "'"
-        .byte $0c,$18,$30,$30,$30,$18,$0c,$00      ;  40, "("
-        .byte $30,$18,$0c,$0c,$0c,$18,$30,$00      ;  41, ")"
-        .byte $00,$66,$3c,$ff,$3c,$66,$00,$00      ;  42, "*"
-        .byte $00,$18,$18,$7e,$18,$18,$00,$00      ;  43, "+"
-        .byte $00,$00,$00,$00,$00,$18,$18,$30      ;  44, ","
-        .byte $00,$00,$00,$7e,$00,$00,$00,$00      ;  45, "-"
-        .byte $00,$00,$00,$00,$00,$18,$18,$00      ;  46, "."
-        .byte $06,$0c,$18,$30,$60,$c0,$80,$00      ;  47, "/"
-        .byte $38,$6c,$c6,$d6,$c6,$6c,$38,$00      ;  48, "0"
-        .byte $18,$38,$18,$18,$18,$18,$7e,$00      ;  49, "1"
-        .byte $7c,$c6,$06,$1c,$30,$66,$fe,$00      ;  50, "2"
-        .byte $7c,$c6,$06,$3c,$06,$c6,$7c,$00      ;  51, "3"
-        .byte $1c,$3c,$6c,$cc,$fe,$0c,$1e,$00      ;  52, "4"
-        .byte $fe,$c0,$c0,$fc,$06,$c6,$7c,$00      ;  53, "5"
-        .byte $38,$60,$c0,$fc,$c6,$c6,$7c,$00      ;  54, "6"
-        .byte $fe,$c6,$0c,$18,$30,$30,$30,$00      ;  55, "7"
-        .byte $7c,$c6,$c6,$7c,$c6,$c6,$7c,$00      ;  56, "8"
-        .byte $7c,$c6,$c6,$7e,$06,$0c,$78,$00      ;  57, "9"
-        .byte $00,$18,$18,$00,$00,$18,$18,$00      ;  58, ":"
-        .byte $00,$18,$18,$00,$00,$18,$18,$30      ;  59, ";"
-        .byte $06,$0c,$18,$30,$18,$0c,$06,$00      ;  60, "<"
-        .byte $00,$00,$7e,$00,$00,$7e,$00,$00      ;  61, "="
-        .byte $60,$30,$18,$0c,$18,$30,$60,$00      ;  62, ">"
-        .byte $7c,$c6,$0c,$18,$18,$00,$18,$00      ;  63, "?"
-        .byte $7c,$c6,$de,$de,$de,$c0,$78,$00      ;  64, "@"
-        .byte $38,$6c,$c6,$fe,$c6,$c6,$c6,$00      ;  65, "A"
-        .byte $fc,$66,$66,$7c,$66,$66,$fc,$00      ;  66, "B"
-        .byte $3c,$66,$c0,$c0,$c0,$66,$3c,$00      ;  67, "C"
-        .byte $f8,$6c,$66,$66,$66,$6c,$f8,$00      ;  68, "D"
-        .byte $fe,$62,$68,$78,$68,$62,$fe,$00      ;  69, "E"
-        .byte $fe,$62,$68,$78,$68,$60,$f0,$00      ;  70, "F"
-        .byte $3c,$66,$c0,$c0,$ce,$66,$3a,$00      ;  71, "G"
-        .byte $c6,$c6,$c6,$fe,$c6,$c6,$c6,$00      ;  72, "H"
-        .byte $3c,$18,$18,$18,$18,$18,$3c,$00      ;  73, "I"
-        .byte $1e,$0c,$0c,$0c,$cc,$cc,$78,$00      ;  74, "J"
-        .byte $e6,$66,$6c,$78,$6c,$66,$e6,$00      ;  75, "K"
-        .byte $f0,$60,$60,$60,$62,$66,$fe,$00      ;  76, "L"
-        .byte $c6,$ee,$fe,$fe,$d6,$c6,$c6,$00      ;  77, "M"
-        .byte $c6,$e6,$f6,$de,$ce,$c6,$c6,$00      ;  78, "N"
-        .byte $7c,$c6,$c6,$c6,$c6,$c6,$7c,$00      ;  79, "O"
-        .byte $fc,$66,$66,$7c,$60,$60,$f0,$00      ;  80, "P"
-        .byte $7c,$c6,$c6,$c6,$c6,$ce,$7c,$0e      ;  81, "Q"
-        .byte $fc,$66,$66,$7c,$6c,$66,$e6,$00      ;  82, "R"
-        .byte $3c,$66,$30,$18,$0c,$66,$3c,$00      ;  83, "S"
-        .byte $7e,$7e,$5a,$18,$18,$18,$3c,$00      ;  84, "T"
-        .byte $c6,$c6,$c6,$c6,$c6,$c6,$7c,$00      ;  85, "U"
-        .byte $c6,$c6,$c6,$c6,$c6,$6c,$38,$00      ;  86, "V"
-        .byte $c6,$c6,$c6,$d6,$d6,$fe,$6c,$00      ;  87, "W"
-        .byte $c6,$c6,$6c,$38,$6c,$c6,$c6,$00      ;  88, "X"
-        .byte $66,$66,$66,$3c,$18,$18,$3c,$00      ;  89, "Y"
-        .byte $fe,$c6,$8c,$18,$32,$66,$fe,$00      ;  90, "Z"
-        .byte $3c,$30,$30,$30,$30,$30,$3c,$00      ;  91, "["
-        .byte $c0,$60,$30,$18,$0c,$06,$02,$00      ;  92, "\"
-        .byte $3c,$0c,$0c,$0c,$0c,$0c,$3c,$00      ;  93, "]"
-        .byte $10,$38,$6c,$c6,$00,$00,$00,$00      ;  94, "^"
-        .byte $00,$00,$00,$00,$00,$00,$00,$ff      ;  95, "_"
-        .byte $30,$18,$0c,$00,$00,$00,$00,$00      ;  96, "`"
-        .byte $00,$00,$78,$0c,$7c,$cc,$76,$00      ;  97, "a"
-        .byte $e0,$60,$7c,$66,$66,$66,$dc,$00      ;  98, "b"
-        .byte $00,$00,$7c,$c6,$c0,$c6,$7c,$00      ;  99, "c"
-        .byte $1c,$0c,$7c,$cc,$cc,$cc,$76,$00      ;  100, "d"
-        .byte $00,$00,$7c,$c6,$fe,$c0,$7c,$00      ;  101, "e"
-        .byte $3c,$66,$60,$f8,$60,$60,$f0,$00      ;  102, "f"
-        .byte $00,$00,$76,$cc,$cc,$7c,$0c,$f8      ;  103, "g"
-        .byte $e0,$60,$6c,$76,$66,$66,$e6,$00      ;  104, "h"
-        .byte $18,$00,$38,$18,$18,$18,$3c,$00      ;  105, "i"
-        .byte $06,$00,$06,$06,$06,$66,$66,$3c      ;  106, "j"
-        .byte $e0,$60,$66,$6c,$78,$6c,$e6,$00      ;  107, "k"
-        .byte $38,$18,$18,$18,$18,$18,$3c,$00      ;  108, "l"
-        .byte $00,$00,$ec,$fe,$d6,$d6,$d6,$00      ;  109, "m"
-        .byte $00,$00,$dc,$66,$66,$66,$66,$00      ;  110, "n"
-        .byte $00,$00,$7c,$c6,$c6,$c6,$7c,$00      ;  111, "o"
-        .byte $00,$00,$dc,$66,$66,$7c,$60,$f0      ;  112, "p"
-        .byte $00,$00,$76,$cc,$cc,$7c,$0c,$1e      ;  113, "q"
-        .byte $00,$00,$dc,$76,$60,$60,$f0,$00      ;  114, "r"
-        .byte $00,$00,$7e,$c0,$7c,$06,$fc,$00      ;  115, "s"
-        .byte $30,$30,$fc,$30,$30,$36,$1c,$00      ;  116, "t"
-        .byte $00,$00,$cc,$cc,$cc,$cc,$76,$00      ;  117, "u"
-        .byte $00,$00,$c6,$c6,$c6,$6c,$38,$00      ;  118, "v"
-        .byte $00,$00,$c6,$d6,$d6,$fe,$6c,$00      ;  119, "w"
-        .byte $00,$00,$c6,$6c,$38,$6c,$c6,$00      ;  120, "x"
-        .byte $00,$00,$c6,$c6,$c6,$7e,$06,$fc      ;  121, "y"
-        .byte $00,$00,$7e,$4c,$18,$32,$7e,$00      ;  122, "z"
-        .byte $0e,$18,$18,$70,$18,$18,$0e,$00      ;  123, "{"
-        .byte $18,$18,$18,$18,$18,$18,$18,$00      ;  124, "|"
-        .byte $70,$18,$18,$0e,$18,$18,$70,$00      ;  125, "}"
-        .byte $76,$dc,$00,$00,$00,$00,$00,$00      ;  126, "~"
-        .byte $00,$10,$38,$6c,$c6,$c6,$fe,$00      ;  127
-        .byte $7c,$c6,$c0,$c0,$c6,$7c,$0c,$78      ;  128
-        .byte $cc,$00,$cc,$cc,$cc,$cc,$76,$00      ;  129
-        .byte $0c,$18,$7c,$c6,$fe,$c0,$7c,$00      ;  130
-        .byte $7c,$82,$78,$0c,$7c,$cc,$76,$00      ;  131
-        .byte $c6,$00,$78,$0c,$7c,$cc,$76,$00      ;  132
-        .byte $30,$18,$78,$0c,$7c,$cc,$76,$00      ;  133
-        .byte $30,$30,$78,$0c,$7c,$cc,$76,$00      ;  134
-        .byte $00,$00,$7e,$c0,$c0,$7e,$0c,$38      ;  135
-        .byte $7c,$82,$7c,$c6,$fe,$c0,$7c,$00      ;  136
-        .byte $c6,$00,$7c,$c6,$fe,$c0,$7c,$00      ;  137
-        .byte $30,$18,$7c,$c6,$fe,$c0,$7c,$00      ;  138
-        .byte $66,$00,$38,$18,$18,$18,$3c,$00      ;  139
-        .byte $7c,$82,$38,$18,$18,$18,$3c,$00      ;  140
-        .byte $30,$18,$00,$38,$18,$18,$3c,$00      ;  141
-        .byte $c6,$38,$6c,$c6,$fe,$c6,$c6,$00      ;  142
-        .byte $38,$6c,$7c,$c6,$fe,$c6,$c6,$00      ;  143
-        .byte $18,$30,$fe,$c0,$f8,$c0,$fe,$00      ;  144
-        .byte $00,$00,$7e,$18,$7e,$d8,$7e,$00      ;  145
-        .byte $3e,$6c,$cc,$fe,$cc,$cc,$ce,$00      ;  146
-        .byte $7c,$82,$7c,$c6,$c6,$c6,$7c,$00      ;  147
-        .byte $c6,$00,$7c,$c6,$c6,$c6,$7c,$00      ;  148
-        .byte $30,$18,$7c,$c6,$c6,$c6,$7c,$00      ;  149
-        .byte $78,$84,$00,$cc,$cc,$cc,$76,$00      ;  150
-        .byte $60,$30,$cc,$cc,$cc,$cc,$76,$00      ;  151
-        .byte $c6,$00,$c6,$c6,$c6,$7e,$06,$fc      ;  152
-        .byte $c6,$38,$6c,$c6,$c6,$6c,$38,$00      ;  153
-        .byte $c6,$00,$c6,$c6,$c6,$c6,$7c,$00      ;  154
-        .byte $18,$18,$7e,$c0,$c0,$7e,$18,$18      ;  155
-        .byte $38,$6c,$64,$f0,$60,$66,$fc,$00      ;  156
-        .byte $66,$66,$3c,$7e,$18,$7e,$18,$18      ;  157
-        .byte $f8,$cc,$cc,$fa,$c6,$cf,$c6,$c7      ;  158
-        .byte $0e,$1b,$18,$3c,$18,$d8,$70,$00      ;  159
-        .byte $18,$30,$78,$0c,$7c,$cc,$76,$00      ;  160
-        .byte $0c,$18,$00,$38,$18,$18,$3c,$00      ;  161
-        .byte $0c,$18,$7c,$c6,$c6,$c6,$7c,$00      ;  162
-        .byte $18,$30,$cc,$cc,$cc,$cc,$76,$00      ;  163
-        .byte $76,$dc,$00,$dc,$66,$66,$66,$00      ;  164
-        .byte $76,$dc,$00,$e6,$f6,$de,$ce,$00      ;  165
-        .byte $3c,$6c,$6c,$3e,$00,$7e,$00,$00      ;  166
-        .byte $38,$6c,$6c,$38,$00,$7c,$00,$00      ;  167
-        .byte $18,$00,$18,$18,$30,$63,$3e,$00      ;  168
-        .byte $00,$00,$00,$fe,$c0,$c0,$00,$00      ;  169
-        .byte $00,$00,$00,$fe,$06,$06,$00,$00      ;  170
-        .byte $63,$e6,$6c,$7e,$33,$66,$cc,$0f      ;  171
-        .byte $63,$e6,$6c,$7a,$36,$6a,$df,$06      ;  172
-        .byte $18,$00,$18,$18,$3c,$3c,$18,$00      ;  173
-        .byte $00,$33,$66,$cc,$66,$33,$00,$00      ;  174
-        .byte $00,$cc,$66,$33,$66,$cc,$00,$00      ;  175
-        .byte $22,$88,$22,$88,$22,$88,$22,$88      ;  176
-        .byte $55,$aa,$55,$aa,$55,$aa,$55,$aa      ;  177
-        .byte $77,$dd,$77,$dd,$77,$dd,$77,$dd      ;  178
-        .byte $18,$18,$18,$18,$18,$18,$18,$18      ;  179
-        .byte $18,$18,$18,$18,$f8,$18,$18,$18      ;  180
-        .byte $18,$18,$f8,$18,$f8,$18,$18,$18      ;  181
-        .byte $36,$36,$36,$36,$f6,$36,$36,$36      ;  182
-        .byte $00,$00,$00,$00,$fe,$36,$36,$36      ;  183
-        .byte $00,$00,$f8,$18,$f8,$18,$18,$18      ;  184
-        .byte $36,$36,$f6,$06,$f6,$36,$36,$36      ;  185
-        .byte $36,$36,$36,$36,$36,$36,$36,$36      ;  186
-        .byte $00,$00,$fe,$06,$f6,$36,$36,$36      ;  187
-        .byte $36,$36,$f6,$06,$fe,$00,$00,$00      ;  188
-        .byte $36,$36,$36,$36,$fe,$00,$00,$00      ;  189
-        .byte $18,$18,$f8,$18,$f8,$00,$00,$00      ;  190
-        .byte $00,$00,$00,$00,$f8,$18,$18,$18      ;  191
-        .byte $18,$18,$18,$18,$1f,$00,$00,$00      ;  192
-        .byte $18,$18,$18,$18,$ff,$00,$00,$00      ;  193
-        .byte $00,$00,$00,$00,$ff,$18,$18,$18      ;  194
-        .byte $18,$18,$18,$18,$1f,$18,$18,$18      ;  195
-        .byte $00,$00,$00,$00,$ff,$00,$00,$00      ;  196
-        .byte $18,$18,$18,$18,$ff,$18,$18,$18      ;  197
-        .byte $18,$18,$1f,$18,$1f,$18,$18,$18      ;  198
-        .byte $36,$36,$36,$36,$37,$36,$36,$36      ;  199
-        .byte $36,$36,$37,$30,$3f,$00,$00,$00      ;  200
-        .byte $00,$00,$3f,$30,$37,$36,$36,$36      ;  201
-        .byte $36,$36,$f7,$00,$ff,$00,$00,$00      ;  202
-        .byte $00,$00,$ff,$00,$f7,$36,$36,$36      ;  203
-        .byte $36,$36,$37,$30,$37,$36,$36,$36      ;  204
-        .byte $00,$00,$ff,$00,$ff,$00,$00,$00      ;  205
-        .byte $36,$36,$f7,$00,$f7,$36,$36,$36      ;  206
-        .byte $18,$18,$ff,$00,$ff,$00,$00,$00      ;  207
-        .byte $36,$36,$36,$36,$ff,$00,$00,$00      ;  208
-        .byte $00,$00,$ff,$00,$ff,$18,$18,$18      ;  209
-        .byte $00,$00,$00,$00,$ff,$36,$36,$36      ;  210
-        .byte $36,$36,$36,$36,$3f,$00,$00,$00      ;  211
-        .byte $18,$18,$1f,$18,$1f,$00,$00,$00      ;  212
-        .byte $00,$00,$1f,$18,$1f,$18,$18,$18      ;  213
-        .byte $00,$00,$00,$00,$3f,$36,$36,$36      ;  214
-        .byte $36,$36,$36,$36,$ff,$36,$36,$36      ;  215
-        .byte $18,$18,$ff,$18,$ff,$18,$18,$18      ;  216
-        .byte $18,$18,$18,$18,$f8,$00,$00,$00      ;  217
-        .byte $00,$00,$00,$00,$1f,$18,$18,$18      ;  218
-        .byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff      ;  219
-        .byte $00,$00,$00,$00,$ff,$ff,$ff,$ff      ;  220
-        .byte $f0,$f0,$f0,$f0,$f0,$f0,$f0,$f0      ;  221
-        .byte $0f,$0f,$0f,$0f,$0f,$0f,$0f,$0f      ;  222
-        .byte $ff,$ff,$ff,$ff,$00,$00,$00,$00      ;  223
-        .byte $00,$00,$76,$dc,$c8,$dc,$76,$00      ;  224
-        .byte $78,$cc,$cc,$d8,$cc,$c6,$cc,$00      ;  225
-        .byte $fe,$c6,$c0,$c0,$c0,$c0,$c0,$00      ;  226
-        .byte $00,$00,$fe,$6c,$6c,$6c,$6c,$00      ;  227
-        .byte $fe,$c6,$60,$30,$60,$c6,$fe,$00      ;  228
-        .byte $00,$00,$7e,$d8,$d8,$d8,$70,$00      ;  229
-        .byte $00,$00,$66,$66,$66,$66,$7c,$c0      ;  230
-        .byte $00,$76,$dc,$18,$18,$18,$18,$00      ;  231
-        .byte $7e,$18,$3c,$66,$66,$3c,$18,$7e      ;  232
-        .byte $38,$6c,$c6,$fe,$c6,$6c,$38,$00      ;  233
-        .byte $38,$6c,$c6,$c6,$6c,$6c,$ee,$00      ;  234
-        .byte $0e,$18,$0c,$3e,$66,$66,$3c,$00      ;  235
-        .byte $00,$00,$7e,$db,$db,$7e,$00,$00      ;  236
-        .byte $06,$0c,$7e,$db,$db,$7e,$60,$c0      ;  237
-        .byte $1e,$30,$60,$7e,$60,$30,$1e,$00      ;  238
-        .byte $00,$7c,$c6,$c6,$c6,$c6,$c6,$00      ;  239
-        .byte $00,$fe,$00,$fe,$00,$fe,$00,$00      ;  240
-        .byte $18,$18,$7e,$18,$18,$00,$7e,$00      ;  241
-        .byte $30,$18,$0c,$18,$30,$00,$7e,$00      ;  242
-        .byte $0c,$18,$30,$18,$0c,$00,$7e,$00      ;  243
-        .byte $0e,$1b,$1b,$18,$18,$18,$18,$18      ;  244
-        .byte $18,$18,$18,$18,$18,$d8,$d8,$70      ;  245
-        .byte $00,$18,$00,$7e,$00,$18,$00,$00      ;  246
-        .byte $00,$76,$dc,$00,$76,$dc,$00,$00      ;  247
-        .byte $38,$6c,$6c,$38,$00,$00,$00,$00      ;  248
-        .byte $00,$00,$00,$18,$18,$00,$00,$00      ;  249
-        .byte $00,$00,$00,$18,$00,$00,$00,$00      ;  250
-        .byte $0f,$0c,$0c,$0c,$ec,$6c,$3c,$1c      ;  251
-        .byte $6c,$36,$36,$36,$36,$00,$00,$00      ;  252
-        .byte $78,$0c,$18,$30,$7c,$00,$00,$00      ;  253
-        .byte $00,$00,$3c,$3c,$3c,$3c,$00,$00      ;  254
-        .byte $00,$00,$00,$00,$00,$00,$00,$00      ;  255
+;font8x8:
+;        .byte $00,$00,$00,$00,$00,$00,$00,$00      ;  0
+;        .byte $7e,$81,$a5,$81,$bd,$99,$81,$7e      ;  1
+;        .byte $7e,$ff,$db,$ff,$c3,$e7,$ff,$7e      ;  2
+;        .byte $6c,$fe,$fe,$fe,$7c,$38,$10,$00      ;  3
+;        .byte $10,$38,$7c,$fe,$7c,$38,$10,$00      ;  4
+;        .byte $38,$7c,$38,$fe,$fe,$d6,$10,$38      ;  5
+;        .byte $10,$38,$7c,$fe,$fe,$7c,$10,$38      ;  6
+;        .byte $00,$00,$18,$3c,$3c,$18,$00,$00      ;  7
+;        .byte $ff,$ff,$e7,$c3,$c3,$e7,$ff,$ff      ;  8
+;        .byte $00,$3c,$66,$42,$42,$66,$3c,$00      ;  9
+;        .byte $ff,$c3,$99,$bd,$bd,$99,$c3,$ff      ;  10
+;        .byte $0f,$07,$0f,$7d,$cc,$cc,$cc,$78      ;  11
+;        .byte $3c,$66,$66,$66,$3c,$18,$7e,$18      ;  12
+;        .byte $3f,$33,$3f,$30,$30,$70,$f0,$e0      ;  13
+;        .byte $7f,$63,$7f,$63,$63,$67,$e6,$c0      ;  14
+;        .byte $18,$db,$3c,$e7,$e7,$3c,$db,$18      ;  15
+;        .byte $80,$e0,$f8,$fe,$f8,$e0,$80,$00      ;  16
+;        .byte $02,$0e,$3e,$fe,$3e,$0e,$02,$00      ;  17
+;        .byte $18,$3c,$7e,$18,$18,$7e,$3c,$18      ;  18
+;        .byte $66,$66,$66,$66,$66,$00,$66,$00      ;  19
+;        .byte $7f,$db,$db,$7b,$1b,$1b,$1b,$00      ;  20
+;        .byte $3e,$61,$3c,$66,$66,$3c,$86,$7c      ;  21
+;        .byte $00,$00,$00,$00,$7e,$7e,$7e,$00      ;  22
+;        .byte $18,$3c,$7e,$18,$7e,$3c,$18,$ff      ;  23
+;        .byte $18,$3c,$7e,$18,$18,$18,$18,$00      ;  24
+;        .byte $18,$18,$18,$18,$7e,$3c,$18,$00      ;  25
+;        .byte $00,$18,$0c,$fe,$0c,$18,$00,$00      ;  26
+;        .byte $00,$30,$60,$fe,$60,$30,$00,$00      ;  27
+;        .byte $00,$00,$c0,$c0,$c0,$fe,$00,$00      ;  28
+;        .byte $00,$24,$66,$ff,$66,$24,$00,$00      ;  29
+;        .byte $00,$18,$3c,$7e,$ff,$ff,$00,$00      ;  30
+;        .byte $00,$ff,$ff,$7e,$3c,$18,$00,$00      ;  31
+;        .byte $00,$00,$00,$00,$00,$00,$00,$00      ;  32, " "
+;        .byte $18,$3c,$3c,$18,$18,$00,$18,$00      ;  33, "!"
+;        .byte $66,$66,$24,$00,$00,$00,$00,$00      ;  34, """
+;        .byte $6c,$6c,$fe,$6c,$fe,$6c,$6c,$00      ;  35, "#"
+;        .byte $18,$3e,$60,$3c,$06,$7c,$18,$00      ;  36, "$"
+;        .byte $00,$c6,$cc,$18,$30,$66,$c6,$00      ;  37, "%"
+;        .byte $38,$6c,$38,$76,$dc,$cc,$76,$00      ;  38, "&"
+;        .byte $18,$18,$30,$00,$00,$00,$00,$00      ;  39, "'"
+;        .byte $0c,$18,$30,$30,$30,$18,$0c,$00      ;  40, "("
+;        .byte $30,$18,$0c,$0c,$0c,$18,$30,$00      ;  41, ")"
+;        .byte $00,$66,$3c,$ff,$3c,$66,$00,$00      ;  42, "*"
+;        .byte $00,$18,$18,$7e,$18,$18,$00,$00      ;  43, "+"
+;        .byte $00,$00,$00,$00,$00,$18,$18,$30      ;  44, ","
+;        .byte $00,$00,$00,$7e,$00,$00,$00,$00      ;  45, "-"
+;        .byte $00,$00,$00,$00,$00,$18,$18,$00      ;  46, "."
+;        .byte $06,$0c,$18,$30,$60,$c0,$80,$00      ;  47, "/"
+;        .byte $38,$6c,$c6,$d6,$c6,$6c,$38,$00      ;  48, "0"
+;        .byte $18,$38,$18,$18,$18,$18,$7e,$00      ;  49, "1"
+;        .byte $7c,$c6,$06,$1c,$30,$66,$fe,$00      ;  50, "2"
+;        .byte $7c,$c6,$06,$3c,$06,$c6,$7c,$00      ;  51, "3"
+;        .byte $1c,$3c,$6c,$cc,$fe,$0c,$1e,$00      ;  52, "4"
+;        .byte $fe,$c0,$c0,$fc,$06,$c6,$7c,$00      ;  53, "5"
+;        .byte $38,$60,$c0,$fc,$c6,$c6,$7c,$00      ;  54, "6"
+;        .byte $fe,$c6,$0c,$18,$30,$30,$30,$00      ;  55, "7"
+;        .byte $7c,$c6,$c6,$7c,$c6,$c6,$7c,$00      ;  56, "8"
+;        .byte $7c,$c6,$c6,$7e,$06,$0c,$78,$00      ;  57, "9"
+;        .byte $00,$18,$18,$00,$00,$18,$18,$00      ;  58, ":"
+;        .byte $00,$18,$18,$00,$00,$18,$18,$30      ;  59, ";"
+;        .byte $06,$0c,$18,$30,$18,$0c,$06,$00      ;  60, "<"
+;        .byte $00,$00,$7e,$00,$00,$7e,$00,$00      ;  61, "="
+;        .byte $60,$30,$18,$0c,$18,$30,$60,$00      ;  62, ">"
+;        .byte $7c,$c6,$0c,$18,$18,$00,$18,$00      ;  63, "?"
+;        .byte $7c,$c6,$de,$de,$de,$c0,$78,$00      ;  64, "@"
+;        .byte $38,$6c,$c6,$fe,$c6,$c6,$c6,$00      ;  65, "A"
+;        .byte $fc,$66,$66,$7c,$66,$66,$fc,$00      ;  66, "B"
+;        .byte $3c,$66,$c0,$c0,$c0,$66,$3c,$00      ;  67, "C"
+;        .byte $f8,$6c,$66,$66,$66,$6c,$f8,$00      ;  68, "D"
+;        .byte $fe,$62,$68,$78,$68,$62,$fe,$00      ;  69, "E"
+;        .byte $fe,$62,$68,$78,$68,$60,$f0,$00      ;  70, "F"
+;        .byte $3c,$66,$c0,$c0,$ce,$66,$3a,$00      ;  71, "G"
+;        .byte $c6,$c6,$c6,$fe,$c6,$c6,$c6,$00      ;  72, "H"
+;        .byte $3c,$18,$18,$18,$18,$18,$3c,$00      ;  73, "I"
+;        .byte $1e,$0c,$0c,$0c,$cc,$cc,$78,$00      ;  74, "J"
+;        .byte $e6,$66,$6c,$78,$6c,$66,$e6,$00      ;  75, "K"
+;        .byte $f0,$60,$60,$60,$62,$66,$fe,$00      ;  76, "L"
+;        .byte $c6,$ee,$fe,$fe,$d6,$c6,$c6,$00      ;  77, "M"
+;        .byte $c6,$e6,$f6,$de,$ce,$c6,$c6,$00      ;  78, "N"
+;        .byte $7c,$c6,$c6,$c6,$c6,$c6,$7c,$00      ;  79, "O"
+;        .byte $fc,$66,$66,$7c,$60,$60,$f0,$00      ;  80, "P"
+;        .byte $7c,$c6,$c6,$c6,$c6,$ce,$7c,$0e      ;  81, "Q"
+;        .byte $fc,$66,$66,$7c,$6c,$66,$e6,$00      ;  82, "R"
+;        .byte $3c,$66,$30,$18,$0c,$66,$3c,$00      ;  83, "S"
+;        .byte $7e,$7e,$5a,$18,$18,$18,$3c,$00      ;  84, "T"
+;        .byte $c6,$c6,$c6,$c6,$c6,$c6,$7c,$00      ;  85, "U"
+;        .byte $c6,$c6,$c6,$c6,$c6,$6c,$38,$00      ;  86, "V"
+;        .byte $c6,$c6,$c6,$d6,$d6,$fe,$6c,$00      ;  87, "W"
+;        .byte $c6,$c6,$6c,$38,$6c,$c6,$c6,$00      ;  88, "X"
+;        .byte $66,$66,$66,$3c,$18,$18,$3c,$00      ;  89, "Y"
+;        .byte $fe,$c6,$8c,$18,$32,$66,$fe,$00      ;  90, "Z"
+;        .byte $3c,$30,$30,$30,$30,$30,$3c,$00      ;  91, "["
+;        .byte $c0,$60,$30,$18,$0c,$06,$02,$00      ;  92, "\"
+;        .byte $3c,$0c,$0c,$0c,$0c,$0c,$3c,$00      ;  93, "]"
+;        .byte $10,$38,$6c,$c6,$00,$00,$00,$00      ;  94, "^"
+;        .byte $00,$00,$00,$00,$00,$00,$00,$ff      ;  95, "_"
+;        .byte $30,$18,$0c,$00,$00,$00,$00,$00      ;  96, "`"
+;        .byte $00,$00,$78,$0c,$7c,$cc,$76,$00      ;  97, "a"
+;        .byte $e0,$60,$7c,$66,$66,$66,$dc,$00      ;  98, "b"
+;        .byte $00,$00,$7c,$c6,$c0,$c6,$7c,$00      ;  99, "c"
+;        .byte $1c,$0c,$7c,$cc,$cc,$cc,$76,$00      ;  100, "d"
+;        .byte $00,$00,$7c,$c6,$fe,$c0,$7c,$00      ;  101, "e"
+;        .byte $3c,$66,$60,$f8,$60,$60,$f0,$00      ;  102, "f"
+;        .byte $00,$00,$76,$cc,$cc,$7c,$0c,$f8      ;  103, "g"
+;        .byte $e0,$60,$6c,$76,$66,$66,$e6,$00      ;  104, "h"
+;        .byte $18,$00,$38,$18,$18,$18,$3c,$00      ;  105, "i"
+;        .byte $06,$00,$06,$06,$06,$66,$66,$3c      ;  106, "j"
+;        .byte $e0,$60,$66,$6c,$78,$6c,$e6,$00      ;  107, "k"
+;        .byte $38,$18,$18,$18,$18,$18,$3c,$00      ;  108, "l"
+;        .byte $00,$00,$ec,$fe,$d6,$d6,$d6,$00      ;  109, "m"
+;        .byte $00,$00,$dc,$66,$66,$66,$66,$00      ;  110, "n"
+;        .byte $00,$00,$7c,$c6,$c6,$c6,$7c,$00      ;  111, "o"
+;        .byte $00,$00,$dc,$66,$66,$7c,$60,$f0      ;  112, "p"
+;        .byte $00,$00,$76,$cc,$cc,$7c,$0c,$1e      ;  113, "q"
+;        .byte $00,$00,$dc,$76,$60,$60,$f0,$00      ;  114, "r"
+;        .byte $00,$00,$7e,$c0,$7c,$06,$fc,$00      ;  115, "s"
+;        .byte $30,$30,$fc,$30,$30,$36,$1c,$00      ;  116, "t"
+;        .byte $00,$00,$cc,$cc,$cc,$cc,$76,$00      ;  117, "u"
+;        .byte $00,$00,$c6,$c6,$c6,$6c,$38,$00      ;  118, "v"
+;        .byte $00,$00,$c6,$d6,$d6,$fe,$6c,$00      ;  119, "w"
+;        .byte $00,$00,$c6,$6c,$38,$6c,$c6,$00      ;  120, "x"
+;        .byte $00,$00,$c6,$c6,$c6,$7e,$06,$fc      ;  121, "y"
+;        .byte $00,$00,$7e,$4c,$18,$32,$7e,$00      ;  122, "z"
+;        .byte $0e,$18,$18,$70,$18,$18,$0e,$00      ;  123, "{"
+;        .byte $18,$18,$18,$18,$18,$18,$18,$00      ;  124, "|"
+;        .byte $70,$18,$18,$0e,$18,$18,$70,$00      ;  125, "}"
+;        .byte $76,$dc,$00,$00,$00,$00,$00,$00      ;  126, "~"
+;        .byte $00,$10,$38,$6c,$c6,$c6,$fe,$00      ;  127
+;        .byte $7c,$c6,$c0,$c0,$c6,$7c,$0c,$78      ;  128
+;        .byte $cc,$00,$cc,$cc,$cc,$cc,$76,$00      ;  129
+;        .byte $0c,$18,$7c,$c6,$fe,$c0,$7c,$00      ;  130
+;        .byte $7c,$82,$78,$0c,$7c,$cc,$76,$00      ;  131
+;        .byte $c6,$00,$78,$0c,$7c,$cc,$76,$00      ;  132
+;        .byte $30,$18,$78,$0c,$7c,$cc,$76,$00      ;  133
+;        .byte $30,$30,$78,$0c,$7c,$cc,$76,$00      ;  134
+;        .byte $00,$00,$7e,$c0,$c0,$7e,$0c,$38      ;  135
+;        .byte $7c,$82,$7c,$c6,$fe,$c0,$7c,$00      ;  136
+;        .byte $c6,$00,$7c,$c6,$fe,$c0,$7c,$00      ;  137
+;        .byte $30,$18,$7c,$c6,$fe,$c0,$7c,$00      ;  138
+;        .byte $66,$00,$38,$18,$18,$18,$3c,$00      ;  139
+;        .byte $7c,$82,$38,$18,$18,$18,$3c,$00      ;  140
+;        .byte $30,$18,$00,$38,$18,$18,$3c,$00      ;  141
+;        .byte $c6,$38,$6c,$c6,$fe,$c6,$c6,$00      ;  142
+;        .byte $38,$6c,$7c,$c6,$fe,$c6,$c6,$00      ;  143
+;        .byte $18,$30,$fe,$c0,$f8,$c0,$fe,$00      ;  144
+;        .byte $00,$00,$7e,$18,$7e,$d8,$7e,$00      ;  145
+;        .byte $3e,$6c,$cc,$fe,$cc,$cc,$ce,$00      ;  146
+;        .byte $7c,$82,$7c,$c6,$c6,$c6,$7c,$00      ;  147
+;        .byte $c6,$00,$7c,$c6,$c6,$c6,$7c,$00      ;  148
+;        .byte $30,$18,$7c,$c6,$c6,$c6,$7c,$00      ;  149
+;        .byte $78,$84,$00,$cc,$cc,$cc,$76,$00      ;  150
+;        .byte $60,$30,$cc,$cc,$cc,$cc,$76,$00      ;  151
+;        .byte $c6,$00,$c6,$c6,$c6,$7e,$06,$fc      ;  152
+;        .byte $c6,$38,$6c,$c6,$c6,$6c,$38,$00      ;  153
+;        .byte $c6,$00,$c6,$c6,$c6,$c6,$7c,$00      ;  154
+;        .byte $18,$18,$7e,$c0,$c0,$7e,$18,$18      ;  155
+;        .byte $38,$6c,$64,$f0,$60,$66,$fc,$00      ;  156
+;        .byte $66,$66,$3c,$7e,$18,$7e,$18,$18      ;  157
+;        .byte $f8,$cc,$cc,$fa,$c6,$cf,$c6,$c7      ;  158
+;        .byte $0e,$1b,$18,$3c,$18,$d8,$70,$00      ;  159
+;        .byte $18,$30,$78,$0c,$7c,$cc,$76,$00      ;  160
+;        .byte $0c,$18,$00,$38,$18,$18,$3c,$00      ;  161
+;        .byte $0c,$18,$7c,$c6,$c6,$c6,$7c,$00      ;  162
+;        .byte $18,$30,$cc,$cc,$cc,$cc,$76,$00      ;  163
+;        .byte $76,$dc,$00,$dc,$66,$66,$66,$00      ;  164
+;        .byte $76,$dc,$00,$e6,$f6,$de,$ce,$00      ;  165
+;        .byte $3c,$6c,$6c,$3e,$00,$7e,$00,$00      ;  166
+;        .byte $38,$6c,$6c,$38,$00,$7c,$00,$00      ;  167
+;        .byte $18,$00,$18,$18,$30,$63,$3e,$00      ;  168
+;        .byte $00,$00,$00,$fe,$c0,$c0,$00,$00      ;  169
+;        .byte $00,$00,$00,$fe,$06,$06,$00,$00      ;  170
+;        .byte $63,$e6,$6c,$7e,$33,$66,$cc,$0f      ;  171
+;        .byte $63,$e6,$6c,$7a,$36,$6a,$df,$06      ;  172
+;        .byte $18,$00,$18,$18,$3c,$3c,$18,$00      ;  173
+;        .byte $00,$33,$66,$cc,$66,$33,$00,$00      ;  174
+;        .byte $00,$cc,$66,$33,$66,$cc,$00,$00      ;  175
+;        .byte $22,$88,$22,$88,$22,$88,$22,$88      ;  176
+;        .byte $55,$aa,$55,$aa,$55,$aa,$55,$aa      ;  177
+;        .byte $77,$dd,$77,$dd,$77,$dd,$77,$dd      ;  178
+;        .byte $18,$18,$18,$18,$18,$18,$18,$18      ;  179
+;        .byte $18,$18,$18,$18,$f8,$18,$18,$18      ;  180
+;        .byte $18,$18,$f8,$18,$f8,$18,$18,$18      ;  181
+;        .byte $36,$36,$36,$36,$f6,$36,$36,$36      ;  182
+;        .byte $00,$00,$00,$00,$fe,$36,$36,$36      ;  183
+;        .byte $00,$00,$f8,$18,$f8,$18,$18,$18      ;  184
+;        .byte $36,$36,$f6,$06,$f6,$36,$36,$36      ;  185
+;        .byte $36,$36,$36,$36,$36,$36,$36,$36      ;  186
+;        .byte $00,$00,$fe,$06,$f6,$36,$36,$36      ;  187
+;        .byte $36,$36,$f6,$06,$fe,$00,$00,$00      ;  188
+;        .byte $36,$36,$36,$36,$fe,$00,$00,$00      ;  189
+;        .byte $18,$18,$f8,$18,$f8,$00,$00,$00      ;  190
+;        .byte $00,$00,$00,$00,$f8,$18,$18,$18      ;  191
+;        .byte $18,$18,$18,$18,$1f,$00,$00,$00      ;  192
+;        .byte $18,$18,$18,$18,$ff,$00,$00,$00      ;  193
+;        .byte $00,$00,$00,$00,$ff,$18,$18,$18      ;  194
+;        .byte $18,$18,$18,$18,$1f,$18,$18,$18      ;  195
+;        .byte $00,$00,$00,$00,$ff,$00,$00,$00      ;  196
+;        .byte $18,$18,$18,$18,$ff,$18,$18,$18      ;  197
+;        .byte $18,$18,$1f,$18,$1f,$18,$18,$18      ;  198
+;        .byte $36,$36,$36,$36,$37,$36,$36,$36      ;  199
+;        .byte $36,$36,$37,$30,$3f,$00,$00,$00      ;  200
+;        .byte $00,$00,$3f,$30,$37,$36,$36,$36      ;  201
+;        .byte $36,$36,$f7,$00,$ff,$00,$00,$00      ;  202
+;        .byte $00,$00,$ff,$00,$f7,$36,$36,$36      ;  203
+;        .byte $36,$36,$37,$30,$37,$36,$36,$36      ;  204
+;        .byte $00,$00,$ff,$00,$ff,$00,$00,$00      ;  205
+;        .byte $36,$36,$f7,$00,$f7,$36,$36,$36      ;  206
+;        .byte $18,$18,$ff,$00,$ff,$00,$00,$00      ;  207
+;        .byte $36,$36,$36,$36,$ff,$00,$00,$00      ;  208
+;        .byte $00,$00,$ff,$00,$ff,$18,$18,$18      ;  209
+;        .byte $00,$00,$00,$00,$ff,$36,$36,$36      ;  210
+;        .byte $36,$36,$36,$36,$3f,$00,$00,$00      ;  211
+;        .byte $18,$18,$1f,$18,$1f,$00,$00,$00      ;  212
+;        .byte $00,$00,$1f,$18,$1f,$18,$18,$18      ;  213
+;        .byte $00,$00,$00,$00,$3f,$36,$36,$36      ;  214
+;        .byte $36,$36,$36,$36,$ff,$36,$36,$36      ;  215
+;        .byte $18,$18,$ff,$18,$ff,$18,$18,$18      ;  216
+;        .byte $18,$18,$18,$18,$f8,$00,$00,$00      ;  217
+;        .byte $00,$00,$00,$00,$1f,$18,$18,$18      ;  218
+;        .byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff      ;  219
+;        .byte $00,$00,$00,$00,$ff,$ff,$ff,$ff      ;  220
+;        .byte $f0,$f0,$f0,$f0,$f0,$f0,$f0,$f0      ;  221
+;        .byte $0f,$0f,$0f,$0f,$0f,$0f,$0f,$0f      ;  222
+;        .byte $ff,$ff,$ff,$ff,$00,$00,$00,$00      ;  223
+;        .byte $00,$00,$76,$dc,$c8,$dc,$76,$00      ;  224
+;        .byte $78,$cc,$cc,$d8,$cc,$c6,$cc,$00      ;  225
+;        .byte $fe,$c6,$c0,$c0,$c0,$c0,$c0,$00      ;  226
+;        .byte $00,$00,$fe,$6c,$6c,$6c,$6c,$00      ;  227
+;        .byte $fe,$c6,$60,$30,$60,$c6,$fe,$00      ;  228
+;        .byte $00,$00,$7e,$d8,$d8,$d8,$70,$00      ;  229
+;        .byte $00,$00,$66,$66,$66,$66,$7c,$c0      ;  230
+;        .byte $00,$76,$dc,$18,$18,$18,$18,$00      ;  231
+;        .byte $7e,$18,$3c,$66,$66,$3c,$18,$7e      ;  232
+;        .byte $38,$6c,$c6,$fe,$c6,$6c,$38,$00      ;  233
+;        .byte $38,$6c,$c6,$c6,$6c,$6c,$ee,$00      ;  234
+;        .byte $0e,$18,$0c,$3e,$66,$66,$3c,$00      ;  235
+;        .byte $00,$00,$7e,$db,$db,$7e,$00,$00      ;  236
+;        .byte $06,$0c,$7e,$db,$db,$7e,$60,$c0      ;  237
+;        .byte $1e,$30,$60,$7e,$60,$30,$1e,$00      ;  238
+;        .byte $00,$7c,$c6,$c6,$c6,$c6,$c6,$00      ;  239
+;        .byte $00,$fe,$00,$fe,$00,$fe,$00,$00      ;  240
+;        .byte $18,$18,$7e,$18,$18,$00,$7e,$00      ;  241
+;        .byte $30,$18,$0c,$18,$30,$00,$7e,$00      ;  242
+;        .byte $0c,$18,$30,$18,$0c,$00,$7e,$00      ;  243
+;        .byte $0e,$1b,$1b,$18,$18,$18,$18,$18      ;  244
+;        .byte $18,$18,$18,$18,$18,$d8,$d8,$70      ;  245
+;        .byte $00,$18,$00,$7e,$00,$18,$00,$00      ;  246
+;        .byte $00,$76,$dc,$00,$76,$dc,$00,$00      ;  247
+;        .byte $38,$6c,$6c,$38,$00,$00,$00,$00      ;  248
+;        .byte $00,$00,$00,$18,$18,$00,$00,$00      ;  249
+;        .byte $00,$00,$00,$18,$00,$00,$00,$00      ;  250
+;        .byte $0f,$0c,$0c,$0c,$ec,$6c,$3c,$1c      ;  251
+;        .byte $6c,$36,$36,$36,$36,$00,$00,$00      ;  252
+;        .byte $78,$0c,$18,$30,$7c,$00,$00,$00      ;  253
+;        .byte $00,$00,$3c,$3c,$3c,$3c,$00,$00      ;  254
+;        .byte $00,$00,$00,$00,$00,$00,$00,$00      ;  255
 
 ; ****************************************************************************************************************
 ;  The WOZ Monitor for the Apple 1

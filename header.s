@@ -18,6 +18,10 @@
         jmp     _loderunner               ;$C109
         jmp     read_char_async_apple     ;$C10C
         jmp     romdisk_load              ;$C10F
-        jmp     fat32_load_file           ;$C112
-        jmp     dos                       ;$C115
+        jmp     dos                       ;$C112
+        jmp     hires1                    ;$C115
+        jmp     hires2                    ;$C118
+        jmp     read_char_upper           ;$C11B
+        jmp     read_char_async           ;$C11E
+        jmp     textmode                  ;$C121
 .endif

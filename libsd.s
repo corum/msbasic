@@ -94,15 +94,9 @@ sd_init:
 
 
 @initialized:
-  jsr display_message
-  .byte "Initialization succeeded"
-  .byte 10,13,0
   rts
 
 @initfailed:
-  jsr display_message
-  .byte "Initialization failed"
-  .byte 10,13,0
   rts
 
 
@@ -151,10 +145,6 @@ sd_readbyte:
 sd_writebyte:
   ; Tick the clock 8 times with descending bits on MOSI
   ; SD communication is mostly half-duplex so we ignore anything it sends back here
-
-  jsr print_hex
-  jsr print_space
-
   ldx #8                      ; send 8 bits
 
 @loop:
@@ -174,7 +164,6 @@ sd_writebyte:
 
   dex
   bne @loop                   ; loop if there are more bits to send
-
   rts
 
 
@@ -188,10 +177,8 @@ sd_waitresult:
 
 sd_sendcommand:
   ; Debug print which command is being executed
-  ;lda #'c'
-  ;jsr print_char
-  jsr display_message
-  .byte "CMD: ", 0
+  ;jsr display_message
+  ;.byte "CMD: ", 0
 
   lda #SD_MOSI           ; pull CS low to begin command
   sta PORTA
@@ -218,14 +205,14 @@ sd_sendcommand:
   jsr sd_waitresult
   pha
 
-  jsr display_message
-  .byte "{", 0
+  ;jsr display_message
+  ;.byte "{", 0
 
   ; Debug print the result code
-  jsr print_hex
+  ;jsr print_hex
 
-  jsr display_message
-  .byte "}", 10, 13, 0
+  ;jsr display_message
+  ;.byte "}", 10, 13, 0
 
   ; End command
   lda #SD_CS | SD_MOSI   ; set CS high again
@@ -245,34 +232,42 @@ sd_readsector:
   lda #SD_MOSI
   sta PORTA
 
-  jsr display_message
-  .byte "READ: ", 0
+  ;jsr display_message
+  ;.byte 10,13,"read : ", 0
 
   ; Command 17, arg is sector number, crc not checked
   lda #$51                    ; CMD17 - READ_SINGLE_BLOCK
+  ;jsr print_hex
   jsr sd_writebyte
   lda zp_sd_currentsector+3   ; sector 24:31
+  ;jsr print_space
+  ;jsr print_hex
   jsr sd_writebyte
   lda zp_sd_currentsector+2   ; sector 16:23
+  ;jsr print_hex
   jsr sd_writebyte
   lda zp_sd_currentsector+1   ; sector 8:15
+  ;jsr print_hex
   jsr sd_writebyte
   lda zp_sd_currentsector     ; sector 0:7
+  ;jsr print_hex
+  ;jsr print_space
   jsr sd_writebyte
   lda #$01                    ; crc (not checked)
+  ;jsr print_hex
   jsr sd_writebyte
+  ;jsr print_crlf
 
-  jsr display_message
-  .byte 10,13,0
+  ;jsr fat32_dump_fat32_address
 
   jsr sd_waitresult
   cmp #$00
-  bne @fail
+  bne sd_fail
 
   ; wait for data
   jsr sd_waitresult
   cmp #$fe
-  bne @fail
+  bne sd_fail
 
   ; Need to read 512 bytes - two pages of 256 bytes each
   jsr @readpage
@@ -283,13 +278,7 @@ sd_readsector:
   ; End command
   lda #SD_CS | SD_MOSI
   sta PORTA
-  rts
-
-@fail:
-  jsr display_message
-  .byte "Read Sector Failed", 10, 13, 0
-;@failloop:
-;  jmp @failloop
+  
   rts
 
 @readpage:
@@ -298,8 +287,113 @@ sd_readsector:
 @readloop:
   jsr sd_readbyte
   sta (zp_sd_address),y
+  ;jsr print_hex
+  ;jsr print_space
   iny
   bne @readloop
   rts
 
+sd_fail:
+@fail:
+  jsr display_message
+  .byte 10,13,"SD Read Operation Failed", 10, 13, 0
+
+@failloop:
+  jmp @failloop
+
+
+  sd_writesector:
+  ; Write a sector to the SD card.  A sector is 512 bytes.
+  ;
+  ; Parameters:
+  ;    zp_sd_currentsector   32-bit sector number
+  ;    zp_sd_address     address of buffer to take data from
+  
+  lda #SD_MOSI
+  sta PORTA
+
+  ;jsr display_message
+  ;.byte 10,13,"write: ", 0
+
+  ; Command 24, arg is sector number, crc not checked
+  lda #$58                    ; CMD24 - WRITE_BLOCK
+  ;jsr print_hex
+  jsr sd_writebyte
+  lda zp_sd_currentsector+3   ; sector 24:31
+  ;jsr print_space
+  ;jsr print_hex
+  jsr sd_writebyte
+  lda zp_sd_currentsector+2   ; sector 16:23
+  ;jsr print_hex
+  jsr sd_writebyte
+  lda zp_sd_currentsector+1   ; sector 8:15
+  ;jsr print_hex
+  jsr sd_writebyte
+  lda zp_sd_currentsector     ; sector 0:7
+  ;jsr print_hex
+  jsr sd_writebyte
+  ;jsr print_space
+  lda #$01                    ; crc (not checked)
+  ;jsr print_hex
+  jsr sd_writebyte
+
+  ;jsr fat32_dump_fat32_address
+  
+  jsr sd_waitresult
+  cmp #$00
+  bne sd_fail_write
+
+  ; Send start token
+  lda #$fe
+  jsr sd_writebyte
+
+  ; Need to write 512 bytes - two pages of 256 bytes each
+  jsr @writepage
+  inc zp_sd_address+1
+  jsr @writepage
+  dec zp_sd_address+1
+
+  ; wait for data response
+  jsr sd_waitresult
+  and #$1f
+  cmp #$05
+  bne sd_fail_write
+
+@waitidle:
+  jsr sd_readbyte
+  cmp #$ff
+  bne @waitidle
+
+  ; End command
+  lda #SD_CS | SD_MOSI ; set cs and mosi high (disconnected)
+  sta PORTA
+
+  rts
+
+@writepage:
+  ; Write 256 bytes fom zp_sd_address
+  ldy #0
+@writeloop:
+  tya
+  pha
+  lda (zp_sd_address),y
+  jsr sd_writebyte
+  ;jsr print_hex
+  ;jsr print_space
+  pla
+  tay
+  iny
+  bne @writeloop
+  rts
+
+sd_fail_write:
+@fail:
+
+  jsr print_hex
+
+  jsr display_message
+  .byte 10,13,"SD Write Operation Failed", 10, 13, 0
+
+@failloop:
+  jmp @failloop
 
