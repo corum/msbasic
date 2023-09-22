@@ -5,27 +5,27 @@
 ;0xC100 0xE2FF Basic ROM
 ;0xE300 0xFFFF OS
 
-.segment "CODE"
+.segment "OS"
 
 ;ACIA C0
-A_RXD   = $C000
-A_TXD   = $C000
-A_STS   = $C001
-A_RES   = $C001
-A_CMD   = $C002
-A_CTL   = $C003
+A_RXD   = $C100
+A_TXD   = $C100
+A_STS   = $C101
+A_RES   = $C101
+A_CMD   = $C102
+A_CTL   = $C103
 
 ; devices
 ;VIA D1
-PORTB   = $C010
-PORTA   = $C01F     ; PORTA is register 1, this is PORTA with no handshake
-DDRB    = $C012
-DDRA    = $C013
-SHCTL   = $C01A
-ACR     = $C01B     ; auxiliary control register
-PCR     = $C01C     ; peripheral control register
-IFR     = $C01D 
-IER     = $C01E     ; interrupt enable register
+PORTB   = $C200
+PORTA   = $C20F     ; PORTA is register 1, this is PORTA with no handshake
+DDRB    = $C202
+DDRA    = $C203
+SHCTL   = $C20A
+ACR     = $C20B     ; auxiliary control register
+PCR     = $C20C     ; peripheral control register
+IFR     = $C20D 
+IER     = $C20E     ; interrupt enable register
 
 
 ;VIA config flags 
@@ -78,10 +78,10 @@ FONTPTR        = $C0
 FONTPTR_H      = $C1
 
 ; starting of 512 byte buffer used by fat32
-fat32_workspace= $BE00
+fat32_workspace= $C800
 
 ; DOS
-dos_command    = $200  ; command line
+dos_command    = $CF00  ; command line
 dos_params     = dos_command + $7F
 dos_param_3    = dos_command + $7E  ; the command
 dos_param_2    = dos_command + $7D
@@ -91,16 +91,40 @@ dos_file_param = dos_command + $70  ; 11 bytes
 dos_addr_temp  = dos_command + $6E  ; 2 bytes
 
 ; TEXT MODE
+
 TEXT           = $400
 CURSOR_ADDR    = $C2
 CURSOR_ADDR_H  = $C3
 CHAR_DRAW      = $C4
 
+; SOFT SWITCHES
+
+SS_GRAPHICS    = $C050 ; Display Graphics
+SS_TEXT        = $C051 ; Display Text
+SS_FULLSCREEN  = $C052 ; Display Full Screen
+SS_SPLITSCREEN = $C053 ; Display Split Screen
+SS_DISPLAY_1   = $C054 ; Display Page 1
+SS_DISPLAY_2   = $C055 ; Display Page 2
+SS_LORES       = $C056 ; Display LoRes Graphics
+SS_HIRES       = $C057 ; Display HiRes Graphics
+
+SS_R_BANK2     = $C080 ; Read RAM bank 2; no write also $C084 
+SS_W_BANK2     = $C081 ; Read ROM, write RAM bank 2 also $C085
+
+SS_R_ROM2      = $C082 ; Read ROM; no write also $C086
+SS_RW_BANK2    = $C083 ; Read/write RAM bank 2 also $C087
+
+SS_R_BANK1     = $C088 ; Read RAM bank 1; no write also $C08C
+SS_W_BANK1     = $C089 ; Read ROM; write RAM bank 1 also $C08D
+SS_R_ROM1      = $C08A ; Read ROM; no write also $C08E
+SS_RW_BANK1    = $C08B ; Read/write RAM bank 1 also $C08F
+
 ;ROMDISK
-RD_LOW         = $C040
-RD_HIGH        = $C041
-RD_BANK        = $C042
-RD_DATA        = $C043
+
+RD_LOW         = $C300
+RD_HIGH        = $C301
+RD_BANK        = $C302
+RD_DATA        = $C303
 
 ;ROMDISK VARIABLES
 
@@ -130,8 +154,8 @@ KEYLAST        = $D3
 TEMP           = $D4
 RES            = $D4
 
-KBBUF          = $380
-KEYSTATE       = $300
+KBBUF          = $CA00
+KEYSTATE       = $CB00
 
 
 ; keyboard processing states
@@ -209,7 +233,8 @@ init:
     jsr set_hires_page1
 
     ; put machine into text mode with default font 
-    stz $C043
+    bit SS_TEXT
+    bit SS_DISPLAY_1
     jsr cls
 
     cli
@@ -220,24 +245,18 @@ init:
     jmp @loop
 
 hires1:
-    pha 
-    lda #$80
-    sta $C043
-    pla
+    bit SS_GRAPHICS
+    bit SS_DISPLAY_1
     rts
 
 hires2:
-    pha
-    lda #$C0
-    sta $C043
-    pla
+    bit SS_GRAPHICS
+    bit SS_DISPLAY_2
     rts
 
 textmode:
-    pha
-    lda #$00
-    sta $C043
-    pla
+    bit SS_TEXT
+    bit SS_DISPLAY_1
     rts
     
 ; loderunner

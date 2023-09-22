@@ -12,16 +12,16 @@
         jmp     PR_WRITTEN_BY
 .endif
 .ifdef BADGER6502
-        jmp     COLD_START                ;$C100
-        jmp     RESTART                   ;$C103
-        jmp     _cls                      ;$C106
-        jmp     _loderunner               ;$C109
-        jmp     read_char_async_apple     ;$C10C
-        jmp     romdisk_load              ;$C10F
-        jmp     dos                       ;$C112
-        jmp     hires1                    ;$C115
-        jmp     hires2                    ;$C118
-        jmp     read_char_upper           ;$C11B
-        jmp     read_char_async           ;$C11E
-        jmp     textmode                  ;$C121
+        jmp     COLD_START                ;$C800
+        jmp     RESTART                   ;$C803
+        jmp     _cls                      ;$C806
+        jmp     _loderunner               ;$C809
+        jmp     read_char_async_apple     ;$C80C
+        jmp     romdisk_load              ;$C80F
+        jmp     dos                       ;$C812
+        jmp     hires1                    ;$C815
+        jmp     hires2                    ;$C818
+        jmp     read_char_upper           ;$C81B
+        jmp     read_char_async           ;$C81E
+        jmp     textmode                  ;$C821
 .endif

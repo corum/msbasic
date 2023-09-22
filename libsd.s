@@ -4,7 +4,6 @@
 ;   zp_sd_address - 2 bytes
 ;   zp_sd_currentsector - 4 bytes
 
-
 sd_init:
   ; Let the SD card boot up, by pumping the clock with SD CS disabled
 
@@ -177,8 +176,6 @@ sd_waitresult:
 
 sd_sendcommand:
   ; Debug print which command is being executed
-  ;jsr display_message
-  ;.byte "CMD: ", 0
 
   lda #SD_MOSI           ; pull CS low to begin command
   sta PORTA
@@ -204,15 +201,6 @@ sd_sendcommand:
 
   jsr sd_waitresult
   pha
-
-  ;jsr display_message
-  ;.byte "{", 0
-
-  ; Debug print the result code
-  ;jsr print_hex
-
-  ;jsr display_message
-  ;.byte "}", 10, 13, 0
 
   ; End command
   lda #SD_CS | SD_MOSI   ; set CS high again
