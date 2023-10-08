@@ -36,8 +36,7 @@
 ; • First apply the DIR_ENTRY_ATTR_LONG_NAME_MASK to DIR_Attr byte before comparing to 
 ; DIR_ENTRY_ATTR_LONG_NAME
 
-zp_fat32_variables      = $30
-fat32_variables         = $3C0
+zp_fat32_variables      = $F0
 
 fat32_readbuffer = fat32_workspace
 
@@ -1348,66 +1347,66 @@ fat32_markdeleted:
   clc
   rts
 
-fat32_deletefile:
+;fat32_deletefile:
   ; Removes the open file from the SD card.
   ; The directory needs to be open and
   ; zp_sd_address pointed to the first byte of the file entry.
 
   ; Mark the file as "Removed"
-  jsr fat32_markdeleted
+;  jsr fat32_markdeleted
 
   ; We will read a new sector the first time around
-  stz fat32_lastsector
-  stz fat32_lastsector+1
-  stz fat32_lastsector+2
-  stz fat32_lastsector+3
+;  stz fat32_lastsector
+;  stz fat32_lastsector+1
+;  stz fat32_lastsector+2
+;  stz fat32_lastsector+3
 
   ; Now we need to iterate through this file's cluster chain, and remove it from the FAT.
-  ldy #0
-@chainloop:
+;  ldy #0
+;@chainloop:
   ; Seek to cluster
-  sec
-  jsr fat32_seekcluster
+;  sec
+;  jsr fat32_seekcluster
 
   ; Is this the end of the chain?
-  lda fat32_nextcluster+3
-  bmi @endofchain
+;  lda fat32_nextcluster+3
+;  bmi @endofchain
 
   ; Zero it out
-  lda #0
-  sta (zp_sd_address),y
-  iny
-  sta (zp_sd_address),y
-  iny
-  sta (zp_sd_address),y
-  iny
-  sta (zp_sd_address),y
+;  lda #0
+;  sta (zp_sd_address),y
+;  iny
+;  sta (zp_sd_address),y
+;  iny
+;  sta (zp_sd_address),y
+;  iny
+;  sta (zp_sd_address),y
 
   ; Write the FAT
-  jsr fat32_updatefat
+;  jsr fat32_updatefat
 
   ; And go again for another pass.
-  jmp @chainloop
+;  jmp @chainloop
 
-@endofchain:
+;@endofchain:
   ; This is the last cluster in the chain.
 
   ; Just zero it out,
-  lda #0
-  sta (zp_sd_address),y
-  dey
-  sta (zp_sd_address),y
-  dey
-  sta (zp_sd_address),y
-  dey
-  sta (zp_sd_address),y
+;  lda #0
+;  sta (zp_sd_address),y
+;  dey
+;  sta (zp_sd_address),y
+;  dey
+;  sta (zp_sd_address),y
+;  dey
+;  sta (zp_sd_address),y
 
   ; Write the FAT
-  jsr fat32_updatefat
+;  jsr fat32_updatefat
 
   ; And we're done!
-  clc
-  rts
+;  clc
+;  rts
 
 fat32_file_readbyte:
   ; Read a byte from an open file
@@ -1578,24 +1577,24 @@ fat32_file_write:
 
 
 fat32_start:
-  jsr display_message
-  .byte 10,13, "Initializing SD card", 10, 13, 0
+;  jsr display_message
+;  .byte 10,13, "Initializing SD card", 10, 13, 0
 
   jsr sd_init
   jsr fat32_init
   
   bcc @sdinitsuccess
 
-  jsr display_message
-  .byte "SD init failed", 10,13,0
+;  jsr display_message
+;  .byte "SD init failed", 10,13,0
 
   lda fat32_errorstage
   jsr print_hex
   rts
 
 @sdinitsuccess:
-  jsr display_message
-  .byte "SD init succeeded", 10,13,0
+;  jsr display_message
+;  .byte "SD init succeeded", 10,13,0
   
   jsr fat32_openroot
   jsr fat32_dump_diskstats
@@ -1900,102 +1899,102 @@ fat32_open_cd:
   rts
 
 fat32_dump_fat32_address:
-  jsr display_message
-  .byte 10,13,"fat32_address:          $", 0
-  lda fat32_address+1
-  jsr print_hex
-  lda fat32_address
-  jsr print_hex
+;  jsr display_message
+;  .byte 10,13,"fat32_address:          $", 0
+;  lda fat32_address+1
+;  jsr print_hex
+;  lda fat32_address
+;  jsr print_hex
 
-  jsr display_message
-  .byte 10,13,"zp_sd_address:          $", 0
-  lda zp_sd_address+1
-  jsr print_hex
-  lda zp_sd_address
-  jsr print_hex
+;  jsr display_message
+;  .byte 10,13,"zp_sd_address:          $", 0
+;  lda zp_sd_address+1
+;  jsr print_hex
+;  lda zp_sd_address
+;  jsr print_hex
   rts
 
 fat32_dump_diskstats:
-  pha
-  phx
-  phy
+;  pha
+;  phx
+;  phy
 
-  jsr display_message
-  .byte 10,13,"fat32_fatstart          $", 0
-  lda #<fat32_fatstart
-  sta zp_sd_temp
-  lda #>fat32_fatstart
-  sta zp_sd_temp+1
-  jsr print_hex_dword
+;  jsr display_message
+;  .byte 10,13,"fat32_fatstart          $", 0
+;  lda #<fat32_fatstart
+;  sta zp_sd_temp
+;  lda #>fat32_fatstart
+;  sta zp_sd_temp+1
+;  jsr print_hex_dword
 
-  jsr display_message
-  .byte 10,13,"fat32_datastart         $", 0
-  lda #<fat32_datastart
-  sta zp_sd_temp
-  lda #>fat32_datastart
-  sta zp_sd_temp+1
-  jsr print_hex_dword
+;  jsr display_message
+;  .byte 10,13,"fat32_datastart         $", 0
+;  lda #<fat32_datastart
+;  sta zp_sd_temp
+;  lda #>fat32_datastart
+;  sta zp_sd_temp+1
+;  jsr print_hex_dword
 
-  jsr display_message
-  .byte 10,13,"fat32_rootcluster       $", 0
-  lda #<fat32_rootcluster
-  sta zp_sd_temp
-  lda #>fat32_rootcluster
-  sta zp_sd_temp+1
-  jsr print_hex_dword
+;  jsr display_message
+;  .byte 10,13,"fat32_rootcluster       $", 0
+;  lda #<fat32_rootcluster
+;  sta zp_sd_temp
+;  lda #>fat32_rootcluster
+;  sta zp_sd_temp+1
+;  jsr print_hex_dword
 
-  jsr display_message
-  .byte 10,13,"fat32_sectorspercluster $", 0
-  lda fat32_sectorspercluster
-  jsr print_hex
+;  jsr display_message
+;  .byte 10,13,"fat32_sectorspercluster $", 0
+;  lda fat32_sectorspercluster
+;  jsr print_hex
 
-  jsr display_message
-  .byte 10,13,"fat32_pendingsectors    $", 0
-  lda fat32_pendingsectors
-  jsr print_hex
+;  jsr display_message
+;  .byte 10,13,"fat32_pendingsectors    $", 0
+;  lda fat32_pendingsectors
+;  jsr print_hex
 
-  jsr fat32_dump_fat32_address
+;  jsr fat32_dump_fat32_address
 
-  jsr display_message
-  .byte 10,13,"fat32_nextcluster       $", 0
-  lda #<fat32_nextcluster
-  sta zp_sd_temp
-  lda #>fat32_nextcluster
-  sta zp_sd_temp + 1
-  jsr print_hex_dword
+;  jsr display_message
+;  .byte 10,13,"fat32_nextcluster       $", 0
+;  lda #<fat32_nextcluster
+;  sta zp_sd_temp
+;  lda #>fat32_nextcluster
+;  sta zp_sd_temp + 1
+;  jsr print_hex_dword
 
-  jsr display_message
-  .byte 10,13,"fat32_bytesremaining    $", 0
-  lda #<fat32_bytesremaining
-  sta zp_sd_temp
-  lda #>fat32_bytesremaining
-  sta zp_sd_temp+1
-  jsr print_hex_dword
+;  jsr display_message
+;  .byte 10,13,"fat32_bytesremaining    $", 0
+;  lda #<fat32_bytesremaining
+;  sta zp_sd_temp
+;  lda #>fat32_bytesremaining
+;  sta zp_sd_temp+1
+;  jsr print_hex_dword
 
-  jsr display_message
-  .byte 10,13,"zp_sd_currentsector     $", 0
-  lda #<zp_sd_currentsector
-  sta zp_sd_temp
-  lda #>zp_sd_currentsector
-  sta zp_sd_temp + 1
-  jsr print_hex_dword
+;  jsr display_message
+;  .byte 10,13,"zp_sd_currentsector     $", 0
+;  lda #<zp_sd_currentsector
+;  sta zp_sd_temp
+;  lda #>zp_sd_currentsector
+;  sta zp_sd_temp + 1
+;  jsr print_hex_dword
 
-  jsr display_message
-  .byte 10,13,"zp_sd_cd_cluster        $", 0
-  lda #<zp_sd_cd_cluster
-  sta zp_sd_temp
-  lda #>zp_sd_cd_cluster
-  sta zp_sd_temp + 1
-  jsr print_hex_dword
+;  jsr display_message
+;  .byte 10,13,"zp_sd_cd_cluster        $", 0
+;  lda #<zp_sd_cd_cluster
+;  sta zp_sd_temp
+;  lda #>zp_sd_cd_cluster
+;  sta zp_sd_temp + 1
+;  jsr print_hex_dword
 
-  jsr display_message
-  .byte 10,13,"fat32_numfats           $", 0
-  lda fat32_numfats
-  jsr print_hex
+;  jsr display_message
+;  .byte 10,13,"fat32_numfats           $", 0
+;  lda fat32_numfats
+;  jsr print_hex
   
-  ply
-  plx
-  pla
+;  ply
+;  plx
+;  pla
   rts
 
 fat32_dump_lastfoundfreecluster:
