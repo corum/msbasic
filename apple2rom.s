@@ -438,8 +438,8 @@ PRBYTE1:
 .res $F
 ;.org $FDED
 COUT1:
-    JSR print_char
-    RTS
+    jsr	display_char
+    rts
 
 .res $3B
 ;.org $FE2C

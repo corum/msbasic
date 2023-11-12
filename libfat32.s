@@ -277,6 +277,8 @@ fat32_seekcluster:
   ; Before calling, set carry to compare the current FAT sector with lastsector.
   ; Otherwize, clear carry to force reading the FAT.
 
+  clc
+    
   php
 
   ; Target buffer
@@ -480,7 +482,7 @@ fat32_readnextsector:
   ; Prepare to read the next cluster
   sec
   jsr fat32_seekcluster
-
+  
 @readsector:
   dec fat32_pendingsectors
 
@@ -908,7 +910,7 @@ fat32_findnextfreecluster:
   sta fat32_lastfoundfreecluster+3
 
 @searchclusters:
-  jsr fat32_dump_lastfoundfreecluster
+;  jsr fat32_dump_lastfoundfreecluster
 
   ; Seek cluster
   sec
@@ -948,7 +950,7 @@ fat32_findnextfreecluster:
 
 @foundcluster:
   ; done.  
-  jsr fat32_dump_lastfoundfreecluster
+;  jsr fat32_dump_lastfoundfreecluster
   rts
 
 fat32_opendirent:
@@ -1242,7 +1244,7 @@ fat32_readdirent:
 
   jsr fat32_readnextsector
   bcc @gotdata
-
+ 
 @endofdirectory:
   sec
   rts
@@ -1636,12 +1638,12 @@ fat32_dir:
   tax           ; stash file attributes in x
   beq @notadir
   jsr display_message
-  .byte "<DIR> ", 0
+  .byte "<D> ", 0
 
   bra @loopfilename
 @notadir:
   jsr display_message
-  .byte "      ", 0
+  .byte "    ", 0
 
 ; WRITE THE FILENAME
 @loopfilename:
@@ -1654,7 +1656,6 @@ fat32_dir:
   iny
   cpy #$B
   bne @loopfilename
-
 
 ; WRITE OUT THE FILE SIZE
   jsr display_message
@@ -1686,7 +1687,6 @@ fat32_dir:
   dey
   lda (zp_sd_address),y
   jsr print_hex
-
 
   jsr print_crlf
 
@@ -1997,56 +1997,56 @@ fat32_dump_diskstats:
 ;  pla
   rts
 
-fat32_dump_lastfoundfreecluster:
-  pha
-  phx
-  phy
-  jsr display_message
-  .byte 10,13,"LFC: ",0
-  lda #<fat32_lastfoundfreecluster
-  sta zp_sd_temp
-  lda #>fat32_lastfoundfreecluster
-  sta zp_sd_temp+1
-  jsr print_hex_dword
-  ply
-  plx
-  pla
-  rts
+;fat32_dump_lastfoundfreecluster:
+;  pha
+;  phx
+;  phy
+;  jsr display_message
+;  .byte 10,13,"LFC: ",0
+;  lda #<fat32_lastfoundfreecluster
+;  sta zp_sd_temp
+;  lda #>fat32_lastfoundfreecluster
+;  sta zp_sd_temp+1
+;  jsr print_hex_dword
+;  ply
+;  plx
+;  pla
+;  rts
 
-fat32_dump_clusterinfo:
-  pha
-  phy
-  jsr display_message
-  .byte 10,13,"fat32_prevcluster: ",0
+;fat32_dump_clusterinfo:
+;  pha
+;  phy
+;  jsr display_message
+;  .byte 10,13,"fat32_prevcluster: ",0
 
-  lda #<fat32_prevcluster
-  sta zp_sd_temp
-  lda #>fat32_prevcluster
-  sta zp_sd_temp+1
-  jsr print_hex_dword
+;  lda #<fat32_prevcluster
+;  sta zp_sd_temp
+;  lda #>fat32_prevcluster
+;  sta zp_sd_temp+1
+;  jsr print_hex_dword
 
-  jsr display_message
-  .byte 10,13,"fat table entry  : ",0
+;  jsr display_message
+;  .byte 10,13,"fat table entry  : ",0
 
-  lda zp_sd_address
-  sta zp_sd_temp
-  lda zp_sd_address + 1
-  sta zp_sd_temp+1
+;  lda zp_sd_address
+;  sta zp_sd_temp
+;  lda zp_sd_address + 1
+;  sta zp_sd_temp+1
 
-  ply
-  phy
+;  ply
+;  phy
 
-  tya
-  clc
-  adc zp_sd_temp
-  sta zp_sd_temp
-  lda zp_sd_temp+1
-  adc #$0
-  sta zp_sd_temp+1
+;  tya
+;  clc
+;  adc zp_sd_temp
+;  sta zp_sd_temp
+;  lda zp_sd_temp+1
+;  adc #$0
+;  sta zp_sd_temp+1
 
-  jsr print_hex_dword
+;  jsr print_hex_dword
   
-  ply
-  pla
-  rts
+;  ply
+;  pla
+;  rts
 
