@@ -33,6 +33,26 @@ PCR     = $C20C     ; peripheral control register
 IFR     = $C20D 
 IER     = $C20E     ; interrupt enable register
 
+;ROMDISK
+RD_LOW         = $C300
+RD_HIGH        = $C301
+RD_BANK        = $C302
+RD_DATA        = $C303
+
+;ROMDISK VARIABLES
+
+SOURCE_LOW     = $43
+SOURCE_HIGH    = $44
+
+RD_BYTES_LOW   = $45
+RD_BYTES_HIGH  = $46
+
+DEST_LOW       = $47
+DEST_HIGH      = $48
+
+MSG_ADDR_LOW   = $49
+MSG_ADDR_HIGH  = $4A
+
 
 ;VIA config flags 
 ICLR   = %01111111  ; clear all VIA interrupts
@@ -111,7 +131,7 @@ dos_addr_temp  = dos_command + $6E  ; 2 bytes
 
 ; SOFT SWITCHES
 
-SS_BASROM_OFF  = $C006
+SS_BASROM_OFF  = $C007
 SS_GRAPHICS    = $C050 ; Display Graphics
 SS_TEXT        = $C051 ; Display Text
 SS_FULLSCREEN  = $C052 ; Display Full Screen
@@ -132,26 +152,6 @@ SS_W_BANK1     = $C089 ; Read ROM; write RAM bank 1 also $C08D
 SS_R_ROM1      = $C08A ; Read ROM; no write also $C08E
 SS_RW_BANK1    = $C08B ; Read/write RAM bank 1 also $C08F
 
-;ROMDISK
-
-RD_LOW         = $C300
-RD_HIGH        = $C301
-RD_BANK        = $C302
-RD_DATA        = $C303
-
-;ROMDISK VARIABLES
-
-SOURCE_LOW     = $43
-SOURCE_HIGH    = $44
-
-RD_BYTES_LOW   = $45
-RD_BYTES_HIGH  = $46
-
-DEST_LOW       = $47
-DEST_HIGH      = $48
-
-MSG_ADDR_LOW   = $49
-MSG_ADDR_HIGH  = $4A
 
 ; PS/2 keyboard memory locations
 KBSTATE        = $CDCA
@@ -176,11 +176,6 @@ PS2_PARITY     = $02
 PS2_STOP       = $03
 
 via_init:
-    sta SS_BASROM_OFF
-    bit SS_GRAPHICS
-    bit SS_TEXT
-    bit SS_FULLSCREEN
-    bit SS_R_ROM2
     lda #%11111111          ; Set all pins on port B to output
     sta DDRB
 
@@ -193,8 +188,6 @@ via_init:
     lda #$83
     sta IER        ; enable interrupts for CA1 and CA2
 
-    jsr A2INIT
-
     rts
 
 ;CODE
@@ -204,6 +197,16 @@ init:
     
     ldx #STACK_TOP
     txs
+
+    jsr A2INIT
+
+    ; put machine into text mode with default font 
+    bit SS_TEXT
+    bit SS_DISPLAY_1
+    bit SS_FULLSCREEN
+    bit SS_HIRES
+    sta SS_BASROM_OFF
+    bit SS_R_ROM2
 
  ;   stz INPUTBUF
     stz INPUTBUFFER
@@ -249,11 +252,7 @@ init:
     sta SCREEN_H
     lda #$00
     sta SCREEN_L
-    jsr set_hires_page1
 
-    ; put machine into text mode with default font 
-    bit SS_TEXT
-    bit SS_DISPLAY_1
     jsr cls
 
     cli
@@ -266,16 +265,19 @@ init:
 hires1:
     bit SS_GRAPHICS
     bit SS_DISPLAY_1
+    bit SS_HIRES
     rts
 
 hires2:
     bit SS_GRAPHICS
     bit SS_DISPLAY_2
+    bit SS_HIRES
     rts
 
 textmode:
     bit SS_TEXT
     bit SS_DISPLAY_1
+    bit SS_FULLSCREEN
     rts
     
 ; loderunner
@@ -305,7 +307,7 @@ _loderunner:
 .include "dos.s"
 
 MSG_FILENOTFOUND:
-    .byte "NOT FOUND"
+    .byte "NOTFOUND"
     .byte CR,LF,0
 
 MSG_FILE_ERROR:
@@ -855,7 +857,7 @@ clear_text_region:
     ldx #$0
 
 @loopx:
-    lda eb_text_msb, x
+    lda eb_text1_msb, x
     sta DEST_HIGH
     lda eb_text_lsb, x
     sta DEST_LOW
@@ -909,7 +911,7 @@ console_add_char:
     
 @storechar:
     ldy CURSOR_Y
-    lda eb_text_msb, y
+    lda eb_text1_msb, y
     sta CURSOR_ADDR_H
     lda eb_text_lsb, y
     sta CURSOR_ADDR
@@ -930,7 +932,7 @@ console_add_char:
     sta CHAR_DRAW
     inc CURSOR_Y
     lda CURSOR_Y
-    cmp #$19    ; line 25?  scroll
+    cmp #$18    ; line 24?  scroll
     bne @done
     dec CURSOR_Y
     jsr scroll_console
@@ -971,7 +973,7 @@ scroll_console:
     ; copy from row 2-1, 3->2, etc...
     ldx #$0
 @loopx:
-    lda eb_text_msb, x
+    lda eb_text1_msb, x
     sta DEST_HIGH
     lda eb_text_lsb, x
     sta DEST_LOW
@@ -980,7 +982,7 @@ scroll_console:
     cpx #$19
     beq @clearinput
     
-    lda eb_text_msb, x
+    lda eb_text1_msb, x
     sta SOURCE_HIGH
     lda eb_text_lsb, x
     sta SOURCE_LOW
@@ -1011,7 +1013,7 @@ scroll_console:
     ldy #$0
     ldx #$18
 
-    lda eb_text_msb, x
+    lda eb_text1_msb, x
     sta DEST_HIGH
     lda eb_text_lsb, x
     sta DEST_LOW
@@ -1053,7 +1055,7 @@ scroll_console:
     ldx #$00
 ;@loopx:
 ;    stx CURSOR_Y
-;    lda eb_text_msb, x
+;    lda eb_text1_msb, x
 ;    sta DEST_HIGH
 ;    lda eb_text_lsb, x
 ;    sta DEST_LOW
@@ -1746,23 +1748,29 @@ eb_hires2_msb:
         .byte $5C,$5C,$5D,$5D,$5D,$5D,$5D,$5D
         .byte $5E,$5E,$5E,$5E,$5E,$5E,$5E,$5F
 
-eb_text_msb:
-        .byte $04,$04,$04,$04
-        .byte $04,$04,$04,$05
-        .byte $05,$05,$05,$05
-        .byte $05,$06,$06,$06
-        .byte $06,$06,$06,$06
-        .byte $07,$07,$07,$07
-        .byte $07
-eb_text_lsb:
-        .byte $00,$28,$50,$78
-        .byte $A0,$C8,$F0,$18
-        .byte $40,$68,$90,$B8
-        .byte $E0,$08,$30,$58
-        .byte $80,$A8,$D0,$F8
-        .byte $20,$48,$70,$98
-        .byte $C0
+eb_text1_msb:
+        .byte $04,$04,$05,$05
+        .byte $06,$06,$07,$07
+        .byte $04,$04,$05,$05
+        .byte $06,$06,$07,$07
+        .byte $04,$04,$05,$05
+        .byte $06,$06,$07,$07
 
+;eb_text2_msb:
+;        .byte $08,$08,$09,$09
+;        .byte $0A,$0A,$0B,$0B
+;        .byte $08,$08,$09,$09
+;        .byte $0A,$0A,$0B,$0B
+;        .byte $08,$08,$09,$09
+;        .byte $0A,$0A,$0B,$0B
+
+eb_text_lsb:
+        .byte $00,$80,$00,$80
+        .byte $00,$80,$00,$80
+        .byte $28,$A8,$28,$A8
+        .byte $28,$A8,$28,$A8
+        .byte $50,$D0,$50,$D0
+        .byte $50,$D0,$50,$D0
 
 
 ; ****************************************************************************************************************
