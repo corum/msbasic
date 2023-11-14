@@ -41,17 +41,17 @@ RD_DATA        = $C303
 
 ;ROMDISK VARIABLES
 
-SOURCE_LOW     = $43
-SOURCE_HIGH    = $44
+SOURCE_LOW     = $F0
+SOURCE_HIGH    = $F1
 
-RD_BYTES_LOW   = $45
-RD_BYTES_HIGH  = $46
+RD_BYTES_LOW   = $F2
+RD_BYTES_HIGH  = $F3
 
-DEST_LOW       = $47
-DEST_HIGH      = $48
+DEST_LOW       = $F4
+DEST_HIGH      = $F5
 
-MSG_ADDR_LOW   = $49
-MSG_ADDR_HIGH  = $4A
+MSG_ADDR_LOW   = $F6
+MSG_ADDR_HIGH  = $F7
 
 
 ;VIA config flags 
@@ -119,7 +119,7 @@ KEYSTATE        = $CB00
 fat32_variables = $CC00
 
 ; DOS
-dos_command    = $CF00  ; command line
+dos_command    = $CE00  ; command line
 dos_params     = dos_command + $7F
 dos_param_3    = dos_command + $7E  ; the command
 dos_param_2    = dos_command + $7D
@@ -131,7 +131,7 @@ dos_addr_temp  = dos_command + $6E  ; 2 bytes
 
 ; SOFT SWITCHES
 
-SS_BASROM_OFF  = $C007
+SS_BASROM_OFF  = $C006
 SS_GRAPHICS    = $C050 ; Display Graphics
 SS_TEXT        = $C051 ; Display Text
 SS_FULLSCREEN  = $C052 ; Display Full Screen
@@ -979,7 +979,7 @@ scroll_console:
     sta DEST_LOW
 
     inx
-    cpx #$19
+    cpx #$18
     beq @clearinput
     
     lda eb_text1_msb, x
@@ -1011,7 +1011,7 @@ scroll_console:
 @clearinput:
     ; clear the last line and draw screen
     ldy #$0
-    ldx #$18
+    ldx #$17
 
     lda eb_text1_msb, x
     sta DEST_HIGH
