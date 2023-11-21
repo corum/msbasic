@@ -131,7 +131,7 @@ dos_addr_temp  = dos_command + $6E  ; 2 bytes
 
 ; SOFT SWITCHES
 
-SS_BASROM_OFF  = $C006
+SS_BASROM_OFF  = $C007
 SS_GRAPHICS    = $C050 ; Display Graphics
 SS_TEXT        = $C051 ; Display Text
 SS_FULLSCREEN  = $C052 ; Display Full Screen
