@@ -158,7 +158,10 @@ XLTBL:
 ;.org $FB1E
 .res $5
 PREAD:
+    LDA $1000
     RTS
+
+.res $B
 
 A2INIT:
     lda     #$00
@@ -188,8 +191,8 @@ TABV:
     sta     CV
     jmp     VTAB
 
+.res $39
 ;.org $FB97
-.res $47
 ESCOLD:
     sec                     ;insure carry set
     jmp     ESC1
@@ -208,7 +211,22 @@ ESCNEW:
     beq     ESCOLD          ;do normal
     bne     ESCNOW          ;go do it
 
-.res $E
+FBB3:
+    NOP 
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+    NOP
+
 ;.org $FBC1
 BASCALC:
     pha
