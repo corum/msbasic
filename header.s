@@ -24,4 +24,9 @@
         jmp     read_char_upper           ;$E01B
         jmp     read_char_async           ;$E01E
         jmp     textmode                  ;$E021
+        jmp     display_char              ;$E024
+        jmp     display_message           ;$E027
+        jmp     print_hex                 ;$E02A
+        jmp     print_hex_word            ;$E02D
+        jmp     print_crlf                ;$E030
 .endif

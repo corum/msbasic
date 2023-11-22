@@ -36,7 +36,7 @@
 ; • First apply the DIR_ENTRY_ATTR_LONG_NAME_MASK to DIR_Attr byte before comparing to 
 ; DIR_ENTRY_ATTR_LONG_NAME
 
-zp_fat32_variables      = $F0
+zp_fat32_variables      = $E0
 
 fat32_readbuffer = fat32_workspace
 
