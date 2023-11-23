@@ -36,10 +36,9 @@
 ; • First apply the DIR_ENTRY_ATTR_LONG_NAME_MASK to DIR_Attr byte before comparing to 
 ; DIR_ENTRY_ATTR_LONG_NAME
 
-zp_fat32_variables      = $E0
+zp_fat32_variables      = $10
 
 fat32_readbuffer = fat32_workspace
-
 zp_sd_currentsector             = zp_fat32_variables + $00  ; 4 bytes 
 zp_sd_temp                      = zp_fat32_variables + $04  ; 4 bytes
 zp_sd_address                   = zp_fat32_variables + $08  ; 2 bytes

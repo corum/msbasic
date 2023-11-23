@@ -69,15 +69,15 @@ SD_MISO = %00000010
 PORTA_OUTPUTPINS = %11100000 | SD_CS | SD_SCK | SD_MOSI
 
 ;CONSOLE
-CURSOR_X       = $CDA5
-CURSOR_Y       = $CDA6
+CURSOR_X       = $CE00
+CURSOR_Y       = $CE01
 
 ;GRAPHICS
-YADD           = $CDA7
-XADD           = $CDA8
-X1_            = $CDA9
-Y1_            = $CDAA
-X2_            = $CDAB
+YADD           = $CE02
+XADD           = $CE03
+X1_            = $CE04
+Y1_            = $CE05
+X2_            = $CE06
 
 ; TEXT MODE
 
@@ -94,22 +94,40 @@ SCREEN_H       = $56
 HIRESPAGE      = $57
 HIRESPAGE_H    = $58
 
-DRAW_WIDTH     = $CDB2
-DRAW_WIDTH_H   = $CDB3
-DRAW_HEIGHT    = $CDB4
-DRAW_COLOR     = $CDB5
-X1             = $CDB6
-X1_H           = $CDB7
-X2             = $CDB8
-X2_H           = $CDB9
-Y1             = $CDBA
-Y2             = $CDBB
-XD             = $CDBC   ; xdelta for line drawing
-YD             = $CDBD   ; ydelta for line drawing
-XT             = $CDBE   ; x temp
-YT             = $CDBF   ; y temp
-FONTPTR        = $CDC0
-FONTPTR_H      = $CDC1
+DRAW_WIDTH     = $CE07
+DRAW_WIDTH_H   = $CE08
+DRAW_HEIGHT    = $CE09
+DRAW_COLOR     = $CE0A
+X1             = $CE0B
+X1_H           = $CE0C
+X2             = $CE0D
+X2_H           = $CE0E
+Y1             = $CE0F
+Y2             = $CE10
+XD             = $CE11   ; xdelta for line drawing
+YD             = $CE12   ; ydelta for line drawing
+XT             = $CE13   ; x temp
+YT             = $CE14   ; y temp
+FONTPTR        = $CE15
+FONTPTR_H      = $CE16
+
+; PS/2 keyboard memory locations
+KBSTATE        = $CE17
+KBTEMP         = $CE18
+KBCURR         = $CE19 
+KBBIT          = $CE1A
+KBEXTEND       = $CE1B
+KBKEYUP        = $CE1C
+KBDBG          = $CE1D
+KBDBG2         = $CE1E
+KEYTEMP        = $CE1F
+KEYLAST        = $CE20
+
+; keyboard processing states
+PS2_START      = $00
+PS2_KEYS       = $01
+PS2_PARITY     = $02
+PS2_STOP       = $03
 
 ; starting of 512 byte buffer used by fat32
 fat32_workspace= $C800  ; $C800 - $C9FF
@@ -119,7 +137,7 @@ KEYSTATE        = $CB00
 fat32_variables = $CC00
 
 ; DOS
-dos_command    = $CE00  ; command line
+dos_command    = $CD00  ; command line
 dos_params     = dos_command + $7F
 dos_param_3    = dos_command + $7E  ; the command
 dos_param_2    = dos_command + $7D
@@ -152,28 +170,7 @@ SS_W_BANK1     = $C089 ; Read ROM; write RAM bank 1 also $C08D
 SS_R_ROM1      = $C08A ; Read ROM; no write also $C08E
 SS_RW_BANK1    = $C08B ; Read/write RAM bank 1 also $C08F
 
-
-; PS/2 keyboard memory locations
-KBSTATE        = $CDCA
-KBTEMP         = $CDCB
-KBCURR         = $CDCC 
-KBBIT          = $CDCD
-KBEXTEND       = $CDCE
-KBKEYUP        = $CDCF
-KBDBG          = $CDD0
-KBDBG2         = $CDD1
-KEYTEMP        = $CDD2
-KEYLAST        = $CDD3
-TEMP           = $CDD4
-RES            = $CDD5
-
-
-
-; keyboard processing states
-PS2_START      = $00
-PS2_KEYS       = $01
-PS2_PARITY     = $02
-PS2_STOP       = $03
+;CSWL           = $36
 
 via_init:
     lda #%11111111          ; Set all pins on port B to output
@@ -192,13 +189,42 @@ via_init:
 
 ;CODE
 init:
+
+; init PS/2 kb stuff
+    lda #$00
+    sta KBSTATE
+    sta KBTEMP
+    sta KBCURR
+    sta KBBIT
+    sta KBEXTEND
+    sta KBKEYUP
+    sta KBDBG
+    sta KBDBG2
+    sta KEYTEMP
+    sta KEYLAST
+
+    ldx #$00           ; clear the key state and input buffers
+@clrbufx:
+    sta KEYSTATE, x
+    sta KBBUF, x
+    sta dos_command, x
+    sta fat32_workspace, x 
+    sta fat32_workspace+1, x
+    sta fat32_variables, x
+    inx
+    bne @clrbufx
+
     sei
     cld
     
     ldx #STACK_TOP
     txs
 
-    jsr A2INIT
+    ; set console output function for A2
+    lda #<COUT1
+    sta CSWL
+    lda #>COUT1
+    sta CSWL+1
 
     ; put machine into text mode with default font 
     bit SS_TEXT
@@ -214,7 +240,7 @@ init:
     stz CURSOR_Y
 
 ; initialize the ACIA
-    sta A_RES      ; soft reset (value not important)
+    stz A_RES      ; soft reset (value not important)
 
                    ; set specific modes and functions
                    ; no parity, no echo, no Tx interrupt, Rx interrupt, enable Tx/Rx
@@ -225,25 +251,8 @@ init:
     lda #$1F       ; 1 stop bits, 8 bit word length, internal clock, 19.2k baud rate
     sta A_CTL      ; program the ctl register
 
-; init PS/2 kb stuff
-    lda #$00
-    sta KBSTATE
-    sta KBTEMP
-    sta KBCURR
-    sta KBBIT
-    sta KBEXTEND
-    sta KBKEYUP
-    sta KBDBG
-    sta KBDBG2
 
-    ldx #$00           ; clear the key state and input buffers
-@clrbufx:
-    sta KEYSTATE, x
-    sta KBBUF, x
-    inx
-    cpx #$00
-    bne @clrbufx
-
+    jsr A2INIT
 
     jsr via_init
     
@@ -627,6 +636,13 @@ read_char:
 
 ; DISPLAY 
 
+display_apple_char:
+    pha
+    and #$7F
+    jsr display_char
+    pla
+    rts
+
 print_char:
 display_char:
     pha
@@ -754,7 +770,7 @@ _cls:
     sta CURSOR_X
     sta CURSOR_Y
 
-    jsr fillscreen
+    ;jsr fillscreen
     jsr clear_text_region
 
     pla
@@ -871,7 +887,7 @@ clear_text_region:
     cpy #$28
     bne @loopy
     inx
-    cpx #$19
+    cpx #$18
     bne @loopx
 
     ply
@@ -1440,8 +1456,8 @@ irq:
 
     ; check the IFR to see if it's the VIA - aka the keyboard
     lda IFR
+    and #$1
     bne @ps2_keyboard_decode
-    
 
     lda #$41
     jsr tx_char_sync
@@ -1467,17 +1483,22 @@ irq:
     and #$80
 
     ldx KBSTATE
-    cpx #PS2_START
-    beq @start 
     
     cpx #PS2_KEYS
     beq @keys
-  
+
+    cpx #PS2_START
+    beq @start 
+      
     cpx #PS2_PARITY
     beq @parity
 
     cpx #PS2_STOP
     beq @stop
+
+    lda #$42
+    jsr tx_char_sync
+
     ; should never get here
     jmp @exit
 
@@ -1521,9 +1542,10 @@ irq:
     inc KBDBG
     lda #PS2_START
     sta KBSTATE
-
+    
 @process_key:
-    lda KBTEMP
+    lda KBTEMP    
+    
     cmp #$E0           ; set the extended bit if it's an extended character
     bne @notextended
     sta KBEXTEND
@@ -1545,15 +1567,24 @@ irq:
 @clearkeystate:        ; this is the key up path TODO: need to update key state to use ascii code instead of scan code
     ldx KBTEMP
     lda #$00
-    sta KEYSTATE,x
     ; clear flags
     sta KBEXTEND
     sta KBKEYUP
     sta KEYRAM
+
+    cpx #$58
+    bne @clear
+    jmp @exit
+
+@clear:
+    sta KEYSTATE,x
     jmp @exit
 
 @setkeystate:          ; set the key state - this is key down path
     ldx KBTEMP
+    cpx #$58
+    beq @capstoggle
+
     lda #$01
     ora KBEXTEND
     sta KEYSTATE, x
@@ -1570,8 +1601,6 @@ irq:
     beq @nonprint
     cpx #$14           ; ctrl
     beq @nonprint 
-    cpx #$58           ; caps lock
-    beq @nonprint
 
     ; check for shift state
     ldx #$12
@@ -1592,7 +1621,13 @@ irq:
     lda ps2_ascii, x
     ldx KBCURR
     sta KBBUF, x
-    ora #$80
+
+; check for caps lock, if it's on, send low version
+    ldx KEYSTATE + $58
+
+    bne @caps
+    and #$7F
+    @caps:
     sta KEYRAM
     inc KBCURR
     jmp @exit    
@@ -1612,10 +1647,20 @@ irq:
     lda ps2_ascii_control, x
     ldx KBCURR
     sta KBBUF, x
-    ora #$80
     sta KEYRAM
     inc KBCURR
     jmp @exit
+
+@capstoggle:
+    lda KEYSTATE,X
+    beq @turnon
+    lda #$0
+    sta KEYSTATE,x
+    bra @nonprint
+
+@turnon:
+    lda #$1
+    sta KEYSTATE,x
 
 @nonprint:
 @exit:
@@ -1632,27 +1677,37 @@ irq:
 ; ============================================================================================
 ; data
 ; ============================================================================================
-
 ps2_ascii:
   ;      0   1    2    3    4    5    6    7    8    9    A    B    C    D    E    F
-  .byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, "`", $00; 0
-  .byte $00, $00, $00, $00, $00, "Q", "1", $00, $00, $00, "Z", "S", "A", "W", "2", $00; 1
-  .byte $00, "C", "X", "D", "E", "4", "3", $00, $00, " ", "V", "F", "T", "R", "5", $00; 2
-  .byte $00, "N", "B", "H", "G", "Y", "6", $00, $00, $00, "M", "J", "U", "7", "8", $00; 3
-  .byte $00, ",", "K", "I", "O", "0", "9", $00, $00, ".", "/", "L", ";", "P", "-", $00; 4 
-  .byte $00, $00, "'", $00, "[", "=", $00, $00, $00, $00, $0D, "]", $00, "\", $00, $00; 5
+  ;.byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, "`", $00; 0
+  ;.byte $00, $00, $00, $00, $00, "Q", "1", $00, $00, $00, "Z", "S", "A", "W", "2", $00; 1
+  ;.byte $00, "C", "X", "D", "E", "4", "3", $00, $00, " ", "V", "F", "T", "R", "5", $00; 2
+  ;.byte $00, "N", "B", "H", "G", "Y", "6", $00, $00, $00, "M", "J", "U", "7", "8", $00; 3
+  ;.byte $00, ",", "K", "I", "O", "0", "9", $00, $00, ".", "/", "L", ";", "P", "-", $00; 4 
+  ;.byte $00, $00, "'", $00, "[", "=", $00, $00, $00, $00, $0D, "]", $00, "\", $00, $00; 5
+  ;.byte $00, $00, $00, $00, $00, $00, $08, $00, $00, $00, $00, $88, $00, $00, $00, $00; 6
+  ;.byte $00, $00, $8A, $00, $95, $8B, $1B, $00, $00, $00, $00, $00, $00, $00, $00, $00; 7
+
+  ;      0   1    2    3    4    5    6    7    8    9    A    B    C    D    E    F
+  .byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, "~", $00; 0
+  .byte $00, $00, $00, $00, $00, $D1, $B1, $00, $00, $00, $DA, $D3, $C1, $D7, $B2, $00; 1
+  .byte $00, $C3, $D8, $C4, $C5, $B4, $B3, $00, $00, $A0, $D6, $C6, $D4, $D2, $B5, $00; 2
+  .byte $00, $CE, $C2, $C8, $C7, $D9, $B6, $00, $00, $00, $CD, $CA, $D5, $B7, $B8, $00; 3
+  .byte $00, $AC, $CB, $C9, $CF, $B0, $B9, $00, $00, $AE, $AF, $CC, $BB, $D0, $AD, $00; 4  
+  .byte $00, $00, $22, $00, $D8, $8D, $00, $00, $00, $00, $0D, $DD, $00, $DC, $00, $00; 5
   .byte $00, $00, $00, $00, $00, $00, $08, $00, $00, $00, $00, $88, $00, $00, $00, $00; 6
-  .byte $00, $00, $8A, $00, $95, $8B, $1B, $00, $00, $00, $00, $00, $00, $00, $00, $00; 7
+  .byte $00, $00, $8A, $00, $95, $8B, $03, $00, $00, $00, $00, $00, $00, $00, $00, $00; 7
 
 ps2_ascii_shifted:
   ;      0   1    2    3    4    5    6    7    8    9    A    B    C    D    E    F
   .byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, "~", $00; 0
-  .byte $00, $00, $00, $00, $00, $D1, "!", $00, $00, $00, $DA, $D3, $C1, $D7, "@", $00; 1
-  .byte $00, $C3, $D8, $C4, $C5, "$", "#", $00, $00, " ", $D6, $C6, $D4, $D2, "%", $00; 2
-  .byte $00, $CE, $C2, $C8, $C7, $D9, "^", $00, $00, $00, $CE, $CA, $D5, "&", "*", $00; 3
-  .byte $00, "<", $CB, $C9, $CF, ")", "(", $00, $00, ">", "?", $CC, $BB, $D0, "_", $00; 4  .byte $00, $00, $22, $00, "{", "+", $00, $00, $00, $00, $0D, "}", $00, "|", $00, $00; 5
-  .byte $00, $00, $00, $00, $00, $00, $08, $00, $00, $00, $00, $00, $00, $00, $00, $00; 6
-  .byte $00, $00, $00, $00, $00, $00, $03, $00, $00, $00, $00, $00, $00, $00, $00, $00; 7
+  .byte $00, $00, $00, $00, $00, $D1, $A1, $00, $00, $00, $DA, $D3, $C1, $D7, $C0, $00; 1
+  .byte $00, $C3, $D8, $C4, $C5, $A4, $A3, $00, $00, " ", $D6, $C6, $D4, $D2, $A5, $00; 2
+  .byte $00, $CE, $C2, $C8, $C7, $D9, $DE, $00, $00, $00, $CE, $CA, $D5, $A6, $AA, $00; 3
+  .byte $00, $BC, $CB, $C9, $CF, $A9, $A8, $00, $00, $BE, $BF, $CC, $BB, $D0, $DF, $00; 4  
+  .byte $00, $00, $22, $00, $D8, $8D, $00, $00, $00, $00, $0D, $DD, $00, "|", $00, $00; 5
+  .byte $00, $00, $00, $00, $00, $00, $08, $00, $00, $00, $00, $88, $00, $00, $00, $00; 6
+  .byte $00, $00, $8A, $00, $95, $8B, $03, $00, $00, $00, $00, $00, $00, $00, $00, $00; 7
  
 
 ps2_ascii_control:
@@ -1661,7 +1716,7 @@ ps2_ascii_control:
   .byte $00, $00, $00, $00, $00, $11, "!", $00, $00, $00, $1A, $13, $01, $17, "@", $00; 1
   .byte $00, $03, $18, $04, $05, "$", "#", $00, $00, " ", $16, $06, $14, $12, "%", $00; 2
   .byte $00, $0E, $02, $08, $07, $19, "^", $00, $00, $00, $0D, $0A, $15, "&", "*", $00; 3
-  .byte $00, "<", $0B, $09, $0F, ")", "(", $00, $00, ">", "?", $0C, ":", $10, "_", $00; 4
+  .byte $00, "<", $0B, $09, $0F, ")", "(", $00, $00, ">", "?", $8C, ":", $10, "_", $00; 4
   .byte $00, $00, $22, $00, "{", "+", $00, $00, $00, $00, $0D, "}", $00, "|", $00, $00; 5
   .byte $00, $00, $00, $00, $00, $00, $08, $00, $00, $00, $00, $00, $00, $00, $00, $00; 6
   .byte $00, $00, $00, $00, $00, $00, $03, $00, $00, $00, $00, $00, $00, $00, $00, $00; 7
@@ -1791,7 +1846,7 @@ MODE            = $2B           ;  $00=XAM, $7F=STOR, $AE=BLOCK XAM
 
 ; Other Variables
 
-IN              = $300   ;  Input buffer to +$7F
+IN              = $CF00    ;  Input buffer to +$7F
 
 .segment "WOZ"
 

@@ -1,11 +1,12 @@
-; DOS variables
-; dos_command    = $A00   ; command line
-; dos_params     = $AEF
-; dos_param_4    = $AEE   ; the command
-; dos_param_3    = $AED
-; dos_param_2    = $AEC
-; dos_param_1    = $AEB
-; dos_param_0    = $AEA
+; DOS
+;dos_command    = $CE00  ; command line
+;dos_params     = dos_command + $7F
+;dos_param_3    = dos_command + $7E  ; the command
+;dos_param_2    = dos_command + $7D
+;dos_param_1    = dos_command + $7C
+;dos_param_0    = dos_command + $7B
+;dos_file_param = dos_command + $70  ; 11 bytes
+;dos_addr_temp  = dos_command + $6E  ; 2 bytes
 
 dos:
     jsr _cls
@@ -17,17 +18,26 @@ newprompt:
     ldx #0
     ldy #0
     stx dos_command
-
+    
 read_command:
     jsr read_char_upper
     and #$7F
     cmp #$0D
     beq @parse_command
+    cmp #$08
+    beq @backspace
     jsr display_char
     sta dos_command,x
     inx
     bra read_command
-
+@backspace:
+    jsr display_char
+    lda #$00
+    sta dos_command,x
+    dex
+    bmi newprompt
+    bra read_command
+    
 ; @parse_command: 
 ; walks through the command string, terminated by a null, 5th param
 ; or $80th character
@@ -221,6 +231,7 @@ cmd_jump:
     ldx dos_param_0
     jsr dos_parse_hex_address
     bcs invalid_address
+    stz KEYRAM
     jmp (dos_addr_temp)
 
 cmd_load:

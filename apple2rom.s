@@ -274,7 +274,7 @@ _RTS3:
     rts
 
 VIDOUT:
-    cmp     #$a0
+    cmp     #$20
     bcs     STORADV
     tay
     bpl     STORADV
@@ -379,7 +379,7 @@ SCRL3:
 CLREOL:
     ldy     CH
 CLEOLZ:
-    lda     #$a0
+    lda     #$20
 CLREOL2:
     sta     (BASL),y
     iny
@@ -455,11 +455,13 @@ PRBYTE1:
 
 .res $F
 ;.org $FDED
+COUT:
+    jmp (CSWL)
 COUT1:
-    jsr	display_char
+    jmp	display_apple_char
     rts
 
-.res $3B
+.res $38
 ;.org $FE2C
 MOVE:
     lda     (A1L),y
