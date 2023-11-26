@@ -145,7 +145,8 @@ dos_param_1    = dos_command + $7C
 dos_param_0    = dos_command + $7B
 dos_file_param = dos_command + $70  ; 11 bytes
 dos_addr_temp  = dos_command + $6E  ; 2 bytes
-
+dos_cout_mode  = dos_command + $6D  ; 1 byte
+dos_cursor     = dos_command + $6C  ; 1 byte
 
 ; SOFT SWITCHES
 
@@ -638,8 +639,45 @@ read_char:
 
 display_apple_char:
     pha
+    bit dos_cout_mode
+    bmi @collect_dos
+    cmp #$84 ; ctrl+d means dos command
+    beq @start_collect_dos
     and #$7F
     jsr display_char
+    pla
+    rts
+@start_collect_dos:
+    lda #$ff
+    sta dos_cout_mode
+    lda #$0
+    sta dos_command
+    sta dos_cursor
+
+    pla
+    rts
+@collect_dos:
+    cmp #$8D ; carraige return means execute
+    beq @execute_dos    
+    phx
+    ldx dos_cursor
+    and #$7F
+    sta dos_command,x
+    inc dos_cursor
+    plx
+
+    pla
+    rts
+@execute_dos:
+    phx
+    ldx dos_cursor
+    lda #$00
+    sta dos_command,x
+    sta dos_cursor
+    sta dos_cout_mode
+    jsr parse_command
+    jsr setup_cout_hook
+    plx
     pla
     rts
 
@@ -1458,7 +1496,7 @@ irq:
     lda IFR
     and #$1
     bne @ps2_keyboard_decode
-
+@unknown_irq:
     lda #$41
     jsr tx_char_sync
 

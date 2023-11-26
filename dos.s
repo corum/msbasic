@@ -7,23 +7,52 @@
 ;dos_param_0    = dos_command + $7B
 ;dos_file_param = dos_command + $70  ; 11 bytes
 ;dos_addr_temp  = dos_command + $6E  ; 2 bytes
+;dos_cout_mode  = dos_command + $6F  ; 1 byte
+;dos_cursor     = dos_command + $70  ; 1 byte
+
+DOS_hook_cout = $03ea
+;CSWL          = $36
+
+hook_buffer:
+    lda #<display_apple_char
+    sta CSWL
+    lda #>display_apple_char
+    sta CSWL+1
+    rts
+
+setup_cout_hook:
+    ; put a routine at DOS_hook_cout that jumps to the hook buffer
+    pha
+    lda #$20  ; JSR
+    sta DOS_hook_cout
+    lda #<hook_buffer
+    sta DOS_hook_cout + 1
+    lda #>hook_buffer
+    sta DOS_hook_cout + 2
+    lda #$60  ; RTS
+    sta DOS_hook_cout + 3
+    pla
+    rts
 
 dos:
+    jsr setup_cout_hook
     jsr _cls
     jsr fat32_start
 
 newprompt:
     jsr display_message
-    .byte 10, 13, "/>", 0
+    .byte 10, 13, ">", 0
     ldx #0
     ldy #0
     stx dos_command
-    
+    stx dos_cout_mode
+    stx dos_cursor
+
 read_command:
     jsr read_char_upper
     and #$7F
     cmp #$0D
-    beq @parse_command
+    beq @do_parse_command
     cmp #$08
     beq @backspace
     jsr display_char
@@ -38,11 +67,15 @@ read_command:
     bmi newprompt
     bra read_command
     
-; @parse_command: 
+; parse_command: 
 ; walks through the command string, terminated by a null, 5th param
 ; or $80th character
-@parse_command:
+@do_parse_command:
     jsr print_crlf
+    jsr parse_command
+    jmp newprompt
+
+parse_command:
     lda #$00
     sta dos_params
     sta dos_command,x
@@ -54,7 +87,14 @@ read_command:
     lda dos_command,y
     beq @process_command
     cmp #$20 ; is it a space
-    bne @count_params
+    beq @delim
+    cmp #$2C ; is it a comma?
+    beq @delim
+    bra @count_params
+@delim:
+    lda #$20            ; if it's a comma, write out a space
+    sta dos_command,y
+
     ldx dos_params
     inc dos_params
     tya
@@ -91,67 +131,44 @@ read_command:
 
 @match_diskstat:
     jsr match_command
-    .byte "DISKSTAT",0
+    .byte "STAT",0
     bcs @match_echo
     jmp cmd_diskstat
 
 @match_echo:
     jsr match_command
     .byte "ECHO",0
-    bcs @match_exit
-    jmp cmd_echo
-
-@match_exit:
-    jsr match_command
-    .byte "EXIT",0
     bcs @match_jump
-    jmp cmd_exit
+    jmp cmd_echo
 
 @match_jump:
     jsr match_command
-    .byte "JUMP",0
-    bcs @match_load
+    .byte "J",0
+    bcs @match_bload
     jmp cmd_jump
 
-@match_load:
+@match_bload:
     jsr match_command
-    .byte "LOAD",0
-    bcs @match_mount
-    jmp cmd_load
+    .byte "BLOAD",0
+    bcs @match_brun
+    jmp cmd_bload
 
-@match_mount:
+@match_brun:
     jsr match_command
-    .byte "MOUNT",0
+    .byte "BRUN",0
     bcs @match_quit
-    jmp cmd_mount
+    jmp cmd_brun
 
 @match_quit:
     jsr match_command
-    .byte "QUIT",0
-    bcs @match_test
-    jmp cmd_exit
-
-@match_test:
-    jsr match_command
-    .byte "TEST",0
-    bcs @match_woz
-    jmp cmd_test
-
-@match_woz:
-    jsr match_command
-    .byte "WOZ",0
+    .byte "Q",0
     bcs @unknown
-    jmp WOZMON
+    jmp cmd_exit
 
 @unknown:
     jsr display_message
-    .byte 10, 13, "Unknown Command", 10, 13, 0
-    jmp newprompt
-
-cmd_test:    
-    ldx dos_param_0
-    jsr dos_setfileparam
-    jmp newprompt
+    .byte 10, 13, "What?", 10, 13, 0
+    rts
 
 cmd_cat:
     ldx dos_param_0
@@ -172,7 +189,7 @@ cmd_cat:
     jmp file_not_found
 
 cmd_chdir:
-    ;jsr fat32_open_cd
+    jsr fat32_open_cd
 
     ldx dos_param_0
     jsr dos_setfileparam
@@ -181,34 +198,34 @@ cmd_chdir:
     bcc @found
 
     jsr display_message
-    .byte 10, 13, "Directory not found", 10, 13, 0
-    jmp newprompt
+    .byte 10, 13, "Err", 10, 13, 0
+    rts
 
 @found:
     jsr fat32_opendirent
 
     jsr display_message
-    .byte 10, 13, "Directory found", 10, 13, 0
+    .byte 10, 13, "OK", 10, 13, 0
 
-    jmp newprompt
+    rts
 
 ; ************************************************************
 ; COMMANDS
 
 cmd_cls:
     jsr _cls
-    jmp newprompt
+    rts
 
 cmd_dir:
     jsr fat32_dir
-    jmp newprompt
+    rts
 
 cmd_diskstat:
     lda #$00
     sta zp_sd_temp + 1
     
     jsr fat32_dump_diskstats
-    jmp newprompt
+    rts
 
 cmd_echo:
     jsr print_crlf
@@ -220,11 +237,9 @@ cmd_echo:
     jsr display_char
     bra @echoloop
 @newprompt:
-    jmp newprompt
+    rts
 
 cmd_exit:
-    jsr display_message
-    .byte 10, 13, "Goodbye!", 10, 13, 0
     jmp WOZMON
 
 cmd_jump:
@@ -234,7 +249,7 @@ cmd_jump:
     stz KEYRAM
     jmp (dos_addr_temp)
 
-cmd_load:
+load_proc:
     ldx dos_param_0
     jsr dos_setfileparam
 
@@ -242,6 +257,7 @@ cmd_load:
     jsr dos_parse_hex_address
     bcs invalid_address
     
+    jsr fat32_open_cd
     jsr fat32_finddirent
     bcs file_not_found
 
@@ -253,26 +269,31 @@ cmd_load:
     sta fat32_address+1
 
     jsr fat32_file_read
+    stz KEYRAM
 
-    jmp newprompt
+    rts
 
+cmd_bload:
+    jsr load_proc
+    rts
+
+cmd_brun:
+    jsr load_proc
+    jmp (dos_addr_temp)
+   
 invalid_address:
     jsr display_message
-    .byte 10, 13, "Invalid Address", 10, 13, 0     
-    jmp newprompt
+    .byte 10, 13, "Bad Address", 10, 13, 0     
+    rts
 
 @found:
     jsr fat32_opendirent
 
-cmd_mount:
-    jsr fat32_start
-    jmp newprompt
-
 file_not_found:
     jsr fat32_open_cd
     jsr display_message
-    .byte 10, 13, "File Not Found", 10, 13, 0
-    jmp newprompt
+    .byte 10, 13, "Not Found", 10, 13, 0
+    rts
 
 ;****************************************************************************
 ; STRING COMPARISON
@@ -375,10 +396,21 @@ dos_convert_hex_nyble:
 
 dos_parse_hex_address:
     ; x points to the first byte of the address parameter
-    
+    ; require A$ to proceed the address
+@parseheader:
+    inx
+    lda dos_command,x        
+    cmp #$41 ; A
+    bne @normal
+    inx
+    lda dos_command,x        
+    cmp #$24 ; $
+    bne @error
+
     ; high nyble of high byte
     inx
     lda dos_command,x
+@normal:
     jsr dos_convert_hex_nyble    
     bcs @error
     clc
