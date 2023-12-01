@@ -284,7 +284,7 @@ sd_readsector:
 sd_fail:
 @fail:
   jsr display_message
-  .byte 10,13,"SD Read Operation Failed", 10, 13, 0
+  .byte 10,13,"SD Read Failed", 10, 13, 0
 
 @failloop:
   jmp @failloop
@@ -380,7 +380,7 @@ sd_fail_write:
   jsr print_hex
 
   jsr display_message
-  .byte 10,13,"SD Write Operation Failed", 10, 13, 0
+  .byte 10,13,"SD Write Failed", 10, 13, 0
 
 @failloop:
   jmp @failloop

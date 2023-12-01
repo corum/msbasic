@@ -14,10 +14,12 @@ DOS_hook_cout = $03ea
 ;CSWL          = $36
 
 hook_buffer:
+    pha
     lda #<display_apple_char
     sta CSWL
     lda #>display_apple_char
     sta CSWL+1
+    pla
     rts
 
 setup_cout_hook:
@@ -92,7 +94,7 @@ parse_command:
     beq @delim
     bra @count_params
 @delim:
-    lda #$20            ; if it's a comma, write out a space
+    lda #$0            ; if it's a comma, write out a null
     sta dos_command,y
 
     ldx dos_params
@@ -126,20 +128,8 @@ parse_command:
 @match_dir:
     jsr match_command
     .byte "DIR",0
-    bcs @match_diskstat
-    jmp cmd_dir
-
-@match_diskstat:
-    jsr match_command
-    .byte "STAT",0
-    bcs @match_echo
-    jmp cmd_diskstat
-
-@match_echo:
-    jsr match_command
-    .byte "ECHO",0
     bcs @match_jump
-    jmp cmd_echo
+    jmp cmd_dir
 
 @match_jump:
     jsr match_command
@@ -156,8 +146,14 @@ parse_command:
 @match_brun:
     jsr match_command
     .byte "BRUN",0
-    bcs @match_quit
+    bcs @match_bsave
     jmp cmd_brun
+
+@match_bsave:
+    jsr match_command
+    .byte "BSAVE",0
+    bcs @match_quit
+    jmp cmd_bsave
 
 @match_quit:
     jsr match_command
@@ -167,7 +163,7 @@ parse_command:
 
 @unknown:
     jsr display_message
-    .byte 10, 13, "What?", 10, 13, 0
+    .byte "What?", 10, 13, 0
     rts
 
 cmd_cat:
@@ -179,7 +175,8 @@ cmd_cat:
 
     jsr fat32_opendirent
 
-    jsr fat32_cat_file
+    ;jsr fat32_cat_file
+    jsr fat32_dump_cluster_chain
     jsr fat32_open_cd
 
     ;jsr fat32_load_file
@@ -197,47 +194,34 @@ cmd_chdir:
     jsr fat32_finddirent
     bcc @found
 
-    jsr display_message
-    .byte 10, 13, "Err", 10, 13, 0
+    jsr display_error
     rts
 
 @found:
     jsr fat32_opendirent
 
-    jsr display_message
-    .byte 10, 13, "OK", 10, 13, 0
+@ok:
+    jsr display_ok
 
     rts
 
+display_error:
+    jsr display_message
+    .byte "Err", 10, 13, 0
+    rts
+
+display_ok:
+    jsr display_message
+    .byte "OK", 10, 13, 0
+    rts
 ; ************************************************************
 ; COMMANDS
 
 cmd_cls:
-    jsr _cls
-    rts
+    jmp _cls
 
 cmd_dir:
-    jsr fat32_dir
-    rts
-
-cmd_diskstat:
-    lda #$00
-    sta zp_sd_temp + 1
-    
-    jsr fat32_dump_diskstats
-    rts
-
-cmd_echo:
-    jsr print_crlf
-
-@echoloop:
-    inx
-    lda dos_command, X
-    beq @newprompt
-    jsr display_char
-    bra @echoloop
-@newprompt:
-    rts
+    jmp fat32_dir
 
 cmd_exit:
     jmp WOZMON
@@ -249,6 +233,11 @@ cmd_jump:
     stz KEYRAM
     jmp (dos_addr_temp)
 
+invalid_address:
+    jsr display_message
+    .byte "Bad Address", 10, 13, 0     
+    rts
+
 load_proc:
     ldx dos_param_0
     jsr dos_setfileparam
@@ -256,21 +245,28 @@ load_proc:
     ldx dos_param_1
     jsr dos_parse_hex_address
     bcs invalid_address
-    
+
     jsr fat32_open_cd
     jsr fat32_finddirent
     bcs file_not_found
-
+    
     jsr fat32_opendirent
 
     lda dos_addr_temp
-    sta fat32_address
+    sta zp_fat32_destination
     lda dos_addr_temp+1
-    sta fat32_address+1
+    sta zp_fat32_destination+1
 
     jsr fat32_file_read
+
     stz KEYRAM
 
+    rts
+
+file_not_found:
+    jsr fat32_open_cd
+    jsr display_message
+    .byte "Not Found", 10, 13, 0
     rts
 
 cmd_bload:
@@ -280,19 +276,67 @@ cmd_bload:
 cmd_brun:
     jsr load_proc
     jmp (dos_addr_temp)
-   
-invalid_address:
-    jsr display_message
-    .byte 10, 13, "Bad Address", 10, 13, 0     
+
+cmd_bsave:
+    ldx dos_param_1              ; start address
+    jsr dos_parse_hex_address
+    bcs invalid_address
+
+    lda dos_addr_temp
+    pha
+    lda dos_addr_temp+1
+    pha
+    
+    ldx dos_param_2              ; length
+    jsr dos_parse_hex_address
+    bcs invalid_address
+
+    ldx dos_param_0
+    jsr dos_setfileparam
+
+    jsr restore_bytesremaining
+
+    jsr fat32_allocatefile
+
+    lda #<dos_file_param
+    sta fat32_filenamepointer
+    lda #>dos_file_param
+    sta fat32_filenamepointer+1
+    
+    jsr restore_bytesremaining
+
+    jsr fat32_open_cd
+
+    jsr fat32_writedirent
+    bcs @error
+    
+    jsr restore_bytesremaining
+
+    pla 
+    sta fat32_address+1
+    pla
+    sta fat32_address
+    
+    jsr fat32_file_write
+    bcc @success
+
+@error:
+    jsr display_error
+    bra     @exit
+
+@success:
+    jsr display_ok
+
+@exit:
     rts
 
-@found:
-    jsr fat32_opendirent
-
-file_not_found:
-    jsr fat32_open_cd
-    jsr display_message
-    .byte 10, 13, "Not Found", 10, 13, 0
+restore_bytesremaining:
+    lda dos_addr_temp
+    sta fat32_bytesremaining
+    lda dos_addr_temp+1
+    sta fat32_bytesremaining + 1
+    stz fat32_bytesremaining+2
+    stz fat32_bytesremaining+3
     rts
 
 ;****************************************************************************
@@ -346,7 +390,7 @@ dos_setfileparam:
     inx
     stx fat32_filenamepointer
     ldy #>dos_command ; set x and y to point to the command line parameter address
-    sty fat32_filenamepointer+1    
+    sty fat32_filenamepointer+1
     jsr fat32_prep_fileparam
     ply
     plx

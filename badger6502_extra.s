@@ -8,7 +8,7 @@
 .segment "A2MON"
 .include "apple2rom.s"
 
-.segment "OS"
+.segment "BANKROM"
 
 ;Keyboard
 KEYRAM  = $C000
@@ -41,17 +41,17 @@ RD_DATA        = $C303
 
 ;ROMDISK VARIABLES
 
-SOURCE_LOW     = $F0
-SOURCE_HIGH    = $F1
+SOURCE_LOW     = $B0
+SOURCE_HIGH    = $B1
 
-RD_BYTES_LOW   = $F2
-RD_BYTES_HIGH  = $F3
+RD_BYTES_LOW   = $B2
+RD_BYTES_HIGH  = $B3
 
-DEST_LOW       = $F4
-DEST_HIGH      = $F5
+DEST_LOW       = $B4
+DEST_HIGH      = $B5
 
-MSG_ADDR_LOW   = $F6
-MSG_ADDR_HIGH  = $F7
+MSG_ADDR_LOW   = $B6
+MSG_ADDR_HIGH  = $B7
 
 
 ;VIA config flags 
@@ -147,6 +147,8 @@ dos_file_param = dos_command + $70  ; 11 bytes
 dos_addr_temp  = dos_command + $6E  ; 2 bytes
 dos_cout_mode  = dos_command + $6D  ; 1 byte
 dos_cursor     = dos_command + $6C  ; 1 byte
+dos_addr_p2    = dos_command + $6D  ; 2 bytes
+dos_addr_p3    = dos_command + $6F  ; 2 bytes
 
 ; SOFT SWITCHES
 
@@ -311,7 +313,6 @@ _loderunner:
     jmp $6000
 
 
-
 .segment "OS"
 .include "libfat32.s"
 .include "dos.s"
@@ -324,9 +325,8 @@ MSG_FILE_ERROR:
     .byte "ERROR"
     .byte CR,LF,0
 
-MSG_OK:
-    .byte "OK"
-    .byte CR,LF,0
+
+.segment "CODE"
 
 ; load and save for eb6502
 eb_load:
@@ -351,14 +351,11 @@ eb_load:
     bra     @exit
 
 @success:
-    lda     #<MSG_OK
-    ldy     #>MSG_OK
-    jsr     STROUT
+    jsr     display_ok
 
 @exit:
     jmp     FIX_LINKS
 
-.segment "CODE"
 eb_save:
     pha
 
@@ -389,7 +386,7 @@ eb_save:
 
     jsr fat32_open_cd
 
-    jsr fat32_dump_diskstats
+    ;jsr fat32_dump_diskstats
     
     jsr fat32_writedirent
     bcs @error
@@ -406,15 +403,11 @@ eb_save:
     bcc @success
 
 @error:
-    lda     #<MSG_FILE_ERROR
-    ldy     #>MSG_FILE_ERROR
-    jsr     STROUT
+    jsr display_error
     bra     @exit
 
 @success:
-    lda     #<MSG_OK
-    ldy     #>MSG_OK
-    jsr     STROUT
+    jsr display_ok
 
 @exit:
     pla
@@ -496,9 +489,7 @@ eb_load_pico:
     bra     @exit
 
 @success:
-    lda     #<MSG_OK
-    ldy     #>MSG_OK
-    jsr     STROUT
+    jsr     display_ok
 
 @exit:
     pla
@@ -511,21 +502,18 @@ eb_save_pico:
     
     beq     @success
 
-    lda     #<MSG_FILE_ERROR
-    ldy     #>MSG_FILE_ERROR
-    jsr     STROUT
+    jsr     display_error
     bra     @exit
 
 @success:
-    lda     #<MSG_OK
-    ldy     #>MSG_OK
-    jsr     STROUT
+    jsr     display_ok
 
 @exit:
     pla
     jmp     FIX_LINKS
 
 .segment "OS"
+
 
 wdc_pause:
     phx
@@ -562,6 +550,7 @@ tx_char_sync:
     jsr wdc_pause
 
     rts
+
 
 
 ;==========================================================================
@@ -653,30 +642,32 @@ display_apple_char:
     lda #$0
     sta dos_command
     sta dos_cursor
-
     pla
     rts
+
 @collect_dos:
     cmp #$8D ; carraige return means execute
     beq @execute_dos    
     phx
     ldx dos_cursor
     and #$7F
+    jsr tx_char_sync
     sta dos_command,x
     inc dos_cursor
     plx
-
     pla
     rts
 @execute_dos:
     phx
+    and #$7F
+    jsr tx_char_sync
     ldx dos_cursor
     lda #$00
-    sta dos_command,x
-    sta dos_cursor
     sta dos_cout_mode
+    sta dos_cursor
+    phy
     jsr parse_command
-    jsr setup_cout_hook
+    ply
     plx
     pla
     rts
@@ -1096,17 +1087,17 @@ scroll_console:
 ; DRAW SCREEN
 ; software text rendering code
 ;draw_screen:
-    pha
-    phy
-    phx
+;    pha
+;    phy
+;    phx
 
     ; stash the cursor
-    lda CURSOR_X
-    pha
-    lda CURSOR_Y
-    pha
+;    lda CURSOR_X
+;    pha
+;    lda CURSOR_Y
+;    pha
 
-    ldx #$00
+;    ldx #$00
 ;@loopx:
 ;    stx CURSOR_Y
 ;    lda eb_text1_msb, x
@@ -1407,6 +1398,7 @@ set_hires_page2:
     pla
     rts
 
+.segment "BANKROM"
 ; ============================================================================================
 ; ROMDISK routines
 ; ============================================================================================
@@ -1473,7 +1465,7 @@ romdisk_load:
     pla
     rts
 
-
+.segment "OS"
 ; ============================================================================================
 ; interrupts
 ; ============================================================================================
