@@ -4,6 +4,8 @@
 ;   zp_sd_address - 2 bytes
 ;   zp_sd_currentsector - 4 bytes
 
+.segment "BANKROM"
+
 sd_init:
   ; Let the SD card boot up, by pumping the clock with SD CS disabled
 
@@ -98,6 +100,7 @@ sd_init:
 @initfailed:
   rts
 
+.segment "OS"
 
 sd_cmd0_bytes:
   .byte $40, $00, $00, $00, $00, $95

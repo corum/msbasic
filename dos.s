@@ -107,12 +107,36 @@ parse_command:
 ; match with an existing command
 @process_command:
 
+@match_del:
+    jsr match_command
+    .byte "DEL", 0
+    bcs @match_fload
+    jmp cmd_del
+
+@match_fload:
+    jsr match_command
+    .byte "FLOAD",0
+    bcs @match_cat
+    jmp cmd_fload
+    
 @match_cat:
     jsr match_command
     .byte "CAT",0
-    bcs @match_cd
+    bcs @match_dc
     jmp cmd_cat
 
+@match_dc:
+    jsr match_command
+    .byte "DC",0
+    bcs @match_hexdump
+    jmp cmd_dc
+
+@match_hexdump:
+    jsr match_command
+    .byte "HD",0
+    bcs @match_cd
+    jmp cmd_hexdump
+    
 @match_cd:
     jsr match_command
     .byte "CD",0
@@ -166,23 +190,63 @@ parse_command:
     .byte "What?", 10, 13, 0
     rts
 
+cmd_del:
+    jsr fat32_set_readbuffer
+    jsr fat32_set_target
+
+    jsr fat32_open_cd
+
+    ldx dos_param_0
+    jsr dos_setfileparam
+
+    jsr fat32_finddirent
+    bcs file_not_found_long
+
+    jsr fat32_deletefile
+    jsr fat32_open_cd
+    rts
+
+cmd_hexdump:
+    ldx dos_param_0
+    jsr dos_setfileparam
+
+    jsr fat32_finddirent
+    bcs file_not_found_long
+
+    jsr fat32_opendirent
+
+    jsr fat32_hexdump_file
+    jsr fat32_open_cd
+    rts
+ 
+cmd_dc:
+    ldx dos_param_0
+    jsr dos_setfileparam
+
+    jsr fat32_finddirent
+    bcs file_not_found_long
+
+    jsr fat32_opendirent
+
+    jsr fat32_dump_cluster_chain
+    jsr fat32_open_cd
+
+    rts
+
 cmd_cat:
     ldx dos_param_0
     jsr dos_setfileparam
 
     jsr fat32_finddirent
-    bcs @file_not_found_long
+    bcs file_not_found_long
 
     jsr fat32_opendirent
 
-    ;jsr fat32_cat_file
-    jsr fat32_dump_cluster_chain
+    jsr fat32_cat_file
     jsr fat32_open_cd
+    rts
 
-    ;jsr fat32_load_file
-    jmp newprompt
-
-@file_not_found_long:
+file_not_found_long:
     jmp file_not_found
 
 cmd_chdir:
@@ -194,16 +258,13 @@ cmd_chdir:
     jsr fat32_finddirent
     bcc @found
 
-    jsr display_error
-    rts
+    jmp display_error
 
 @found:
     jsr fat32_opendirent
 
 @ok:
-    jsr display_ok
-
-    rts
+    jmp display_ok
 
 display_error:
     jsr display_message
@@ -233,18 +294,32 @@ cmd_jump:
     stz KEYRAM
     jmp (dos_addr_temp)
 
-invalid_address:
-    jsr display_message
-    .byte "Bad Address", 10, 13, 0     
-    rts
+load_proc_3:
+    ldx dos_param_2
+    jsr dos_parse_hex_address
+    bcs invalid_address
+
+    lda dos_addr_temp
+    sta fat32_byte_offset
+    lda dos_addr_temp+1
+    sta fat32_byte_offset+1
+
+    ldx dos_param_3
+    jsr dos_parse_hex_address
+    bcs invalid_address
+
+    lda dos_addr_temp
+    sta fat32_file_bytes
+    lda dos_addr_temp+1
+    sta fat32_file_bytes+1
 
 load_proc:
-    ldx dos_param_0
-    jsr dos_setfileparam
-
     ldx dos_param_1
     jsr dos_parse_hex_address
     bcs invalid_address
+
+    ldx dos_param_0
+    jsr dos_setfileparam
 
     jsr fat32_open_cd
     jsr fat32_finddirent
@@ -257,10 +332,12 @@ load_proc:
     lda dos_addr_temp+1
     sta zp_fat32_destination+1
 
-    jsr fat32_file_read
-
     stz KEYRAM
+    rts
 
+invalid_address:
+    jsr display_message
+    .byte "Bad Address", 10, 13, 0     
     rts
 
 file_not_found:
@@ -269,12 +346,19 @@ file_not_found:
     .byte "Not Found", 10, 13, 0
     rts
 
+cmd_fload:
+    jsr load_proc_3
+    jsr fat32_file_read_part
+    rts
+
 cmd_bload:
     jsr load_proc
+    jsr fat32_file_read
     rts
 
 cmd_brun:
     jsr load_proc
+    jsr fat32_file_read
     jmp (dos_addr_temp)
 
 cmd_bsave:
@@ -309,7 +393,7 @@ cmd_bsave:
 
     jsr fat32_writedirent
     bcs @error
-    
+
     jsr restore_bytesremaining
 
     pla 
@@ -318,17 +402,17 @@ cmd_bsave:
     sta fat32_address
     
     jsr fat32_file_write
-    bcc @success
+    bcs @error
+
+    jsr fat32_open_cd
+    rts
+    ;bra @success
 
 @error:
-    jsr display_error
-    bra     @exit
+    jmp display_error
 
 @success:
-    jsr display_ok
-
-@exit:
-    rts
+    jmp display_ok
 
 restore_bytesremaining:
     lda dos_addr_temp
@@ -442,15 +526,6 @@ dos_parse_hex_address:
     ; x points to the first byte of the address parameter
     ; require A$ to proceed the address
 @parseheader:
-    inx
-    lda dos_command,x        
-    cmp #$41 ; A
-    bne @normal
-    inx
-    lda dos_command,x        
-    cmp #$24 ; $
-    bne @error
-
     ; high nyble of high byte
     inx
     lda dos_command,x

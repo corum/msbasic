@@ -1,10 +1,3 @@
-;memory map
-
-;0x0000 0xCFFF RAM 48KB
-;0xC000 0xC0FF Devices 
-;0xC100 0xE2FF Basic ROM
-;0xE300 0xFFFF OS
-
 .segment "A2MON"
 .include "apple2rom.s"
 
@@ -315,7 +308,10 @@ _loderunner:
 
 .segment "OS"
 .include "libfat32.s"
+
+.segment "OS"
 .include "dos.s"
+
 
 MSG_FILENOTFOUND:
     .byte "NOTFOUND"
