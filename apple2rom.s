@@ -38,6 +38,10 @@ STATUS  = $48
 RNDL    = $4e
 RNDH    = $4f
 
+LINE1   = $0400           ;{addr/40}
+
+SOFTEV  = $03f2           ;{addr/2} ;vector for warm start
+PWREDUP = $03f4           ;this must = EOR #$A5 of SOFTEV+1
 IOADR   = $c000
 KEYBD   = $c000           ;R last key pressed + 128
 KBDSTRB = $c010           ;RW keyboard strobe
@@ -47,7 +51,10 @@ TXTSET  = $c051           ;RW display text
 MIXSET  = $c053           ;RW display split screen
 TXTPAGE1= $c054           ;RW display page 1
 LORES   = $c056           ;RW display lo-res graphics
- 
+
+PADDL0  = $c064           ;R analog input 0
+PTRIG   = $c070           ;RW analog input reset
+
 PLOT:
     lsr     A
     php
@@ -150,18 +157,34 @@ RTMSKZ:
     and     #$0f
     rts
 
-;.org $fb11
-.res $28F
+;.org $fafb
+.res $27B
+PWRCON:
+    .byte   $00,$00   ; todo
+    .byte   $00,$e0,$45
+DISKID:
+    .byte   $20,$ff,$00,$ff,$03,$ff,$3c
+TITLE:
+    .byte   "APPLE ]["
 XLTBL:
-    .byte $c4,$c2,$c1,$ff,$c3,$ff,$ff,$ff
+    .byte   $c4,$c2,$c1,$ff,$c3,$ff,$ff,$ff
 
 ;.org $FB1E
-.res $5
+RTBL:
+    .byte "AXYPS"
 PREAD:
-    LDA $1000
-    RTS
-
-.res $B
+    lda     PTRIG
+    ldy     #$00
+    nop
+    nop
+PREAD2:
+    lda     PADDL0,x
+    bpl     RTS2D
+    iny
+    bne     PREAD2
+    dey
+RTS2D:       
+    rts
 
 A2INIT:
     lda     #$00
@@ -191,8 +214,39 @@ TABV:
     sta     CV
     jmp     VTAB
 
-.res $39
-;.org $FB97
+APPLEII:
+    jsr     HOME            ;clear the scrn
+    ldy     #$08
+STITLE:
+    lda     TITLE-1,y       ;get a char
+    sta     LINE1+14,y
+    dey
+    bne     STITLE
+    rts
+
+SETPWRC:
+    lda     SOFTEV+1
+    eor     #$a5
+    sta     PWREDUP
+    rts
+
+VIDWAIT:
+    cmp     #$8d            ;check for a pause only when I have a CR
+    bne     NOWAIT          ;no so, do regular
+    ldy     KEYBD           ;is key pressed?
+    bpl     NOWAIT          ;no
+    cpy     #$93            ;is it ctl S?
+    bne     NOWAIT          ;no so ignore
+    bit     KBDSTRB         ;clear strobe
+KBDWAIT:     
+    ldy     KEYBD           ;wait till next key to resume
+    bpl     KBDWAIT         ;wait for keypress
+    cpy     #$83            ;is it control C ?
+    beq     NOWAIT          ;yes so leave it
+    bit     KBDSTRB         ;clr strobe
+NOWAIT:      
+    jmp     VIDOUT          ;do as before
+
 ESCOLD:
     sec                     ;insure carry set
     jmp     ESC1
