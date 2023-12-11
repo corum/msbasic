@@ -487,7 +487,8 @@ fat32_readnextsector:
   bmi @endofchain
 
   ; Prepare to read the next cluster
-  clc
+  ;clc
+  sec
   jsr fat32_seekcluster
   
 @readsector:
@@ -678,7 +679,7 @@ fat32_openroot:
   sta fat32_nextcluster+3
   sta zp_sd_cd_cluster+3
 
-  clc
+  sec
   jsr fat32_seekcluster
 
   ; Set the pointer to a large value so we always read a sector the first time through
@@ -908,7 +909,7 @@ fat32_findnextfreecluster:
 @searchclusters:
 
   ; Seek cluster
-  clc
+  sec
   jsr fat32_seekcluster
 
   ; Is the cluster free?
@@ -1015,7 +1016,7 @@ fat32_opendirent:
   sta zp_sd_cd_cluster
 
 @seek:
-  clc
+  sec
   jsr fat32_seekcluster
 
   ; Set the pointer to a large value so we always read a sector the first time through
@@ -1048,7 +1049,6 @@ fat32_writedirent:
   ; If it's not at the end of the buffer, we have data already
   cmp #>(fat32_readbuffer+$200)
   bcc @gotdirrent
-
 
   jsr fat32_set_readbuffer
   jsr fat32_readnextsector
@@ -1197,7 +1197,7 @@ fat32_writedirent:
   lda fat32_filecluster+3
   sta fat32_nextcluster+3
   
-  clc
+  sec
   jsr fat32_seekcluster
 
   ; Set the pointer to a large value so we always read a sector the first time through
@@ -1396,7 +1396,7 @@ fat32_deletefile:
   ldy #0
 @chainloop:
   ; Seek to cluster
-  clc
+  sec
   jsr fat32_seekcluster
 
   ; Is this the end of the chain?
@@ -2007,7 +2007,7 @@ fat32_open_cd:
 
   jsr fat32_set_readbuffer
 
-  clc
+  sec
   jsr fat32_seekcluster
   ; Set the pointer to a large value so we always read a sector the first time through
   lda #$ff
@@ -2244,7 +2244,7 @@ fat32_dump_cluster_chain:
   jsr fat32_dump_clusterinfo
 
 @seek:  
-  clc
+  sec
   jsr fat32_seekcluster
   jsr print_crlf
   jsr fat32_dump_clusterinfo
