@@ -702,6 +702,8 @@ fat32_allocatecluster:
   ; Find a free cluster
   jsr fat32_findnextfreecluster
 
+  ;jsr fat32_dump_clusterinfo
+
   ; Add marker for the following routines, so we don't think this is free.
   lda #$0f
   sta (zp_sd_address),y
@@ -774,6 +776,9 @@ fat32_allocatefile:
 @nofail:
   ; This will be clustersremaining now.
   sta fat32_bytesremaining
+  
+  jsr print_hex
+  jsr print_crlf
 
   ; Divide by sectors per cluster (power of 2)
   ; If it's 1, then skip
@@ -894,16 +899,27 @@ fat32_restore_lastcluster:
 fat32_findnextfreecluster:
 
   ; Find a free cluster and store it's location in fat32_lastfoundfreecluster
+  ; fat32_init will init fat32_lastfoundfreecluster to 0
 
-  lda #0
+  ; start from the last found free cluster
+  lda fat32_lastfoundfreecluster
   sta fat32_nextcluster
-  sta fat32_lastfoundfreecluster
+  lda fat32_lastfoundfreecluster+1
   sta fat32_nextcluster+1
-  sta fat32_lastfoundfreecluster+1
+  lda fat32_lastfoundfreecluster+2
   sta fat32_nextcluster+2
-  sta fat32_lastfoundfreecluster+2
+  lda fat32_lastfoundfreecluster+3
   sta fat32_nextcluster+3
-  sta fat32_lastfoundfreecluster+3
+
+;  lda #0
+;  sta fat32_nextcluster
+;  sta fat32_lastfoundfreecluster
+;  sta fat32_nextcluster+1
+;  sta fat32_lastfoundfreecluster+1
+;  sta fat32_nextcluster+2
+;  sta fat32_lastfoundfreecluster+2
+;  sta fat32_nextcluster+3
+;  sta fat32_lastfoundfreecluster+3
 
   
 @searchclusters:
@@ -2244,17 +2260,19 @@ fat32_dump_cluster_chain:
   jsr fat32_dump_clusterinfo
 
 @seek:  
-  sec
-  jsr fat32_seekcluster
-  jsr print_crlf
-  jsr fat32_dump_clusterinfo
-  
   lda fat32_nextcluster
   and fat32_nextcluster+1
   and fat32_nextcluster+2
   cmp #$FF
-  bne @seek
+  beq @done
 
+  sec
+  jsr fat32_seekcluster
+  jsr print_crlf
+  jsr fat32_dump_clusterinfo
+  bra @seek
+
+@done:
   rts
 
 fat32_dump_clusterinfo:
