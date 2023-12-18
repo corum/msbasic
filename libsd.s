@@ -224,7 +224,7 @@ sd_readsector:
   sta PORTA
 
   ;jsr display_message
-  ;.byte 10,13,"read : ", 0
+  ;.byte $8D,"read : ", 0
 
   ; Command 17, arg is sector number, crc not checked
   lda #$51                    ; CMD17 - READ_SINGLE_BLOCK
@@ -287,7 +287,7 @@ sd_readsector:
 sd_fail:
 @fail:
   jsr display_message
-  .byte 10,13,"SD Read Failed", 10, 13, 0
+  .byte $8D,"SD READ FAILED", 10, 13, 0
 
 @failloop:
   jmp @failloop
@@ -304,7 +304,7 @@ sd_fail:
   sta PORTA
 
   ;jsr display_message
-  ;.byte 10,13,"write: ", 0
+  ;.byte $8D,"write: ", 0
 
   ; Command 24, arg is sector number, crc not checked
   lda #$58                    ; CMD24 - WRITE_BLOCK
@@ -383,7 +383,7 @@ sd_fail_write:
   jsr print_hex
 
   jsr display_message
-  .byte 10,13,"SD Write Failed", 10, 13, 0
+  .byte $8D,"SD WRITE FAILED", $8D, 0
 
 @failloop:
   jmp @failloop

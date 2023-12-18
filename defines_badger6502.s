@@ -44,7 +44,7 @@ RAMSTART2		:= $1000
 ENTROPY = $7000
 
 ; monitor functions
-MONRDKEY        := read_char_upper_echo
+MONRDKEY        := RDCHAR
 MONCOUT         := display_char
 ;CHKIN           := do_nothing
 ;CHKOUT          := do_nothing

@@ -611,7 +611,7 @@ fat32_updatefat:
   jsr fat32_set_target
 
   ; jsr display_message
-  ; .byte 10,13,"updating FAT #1",0
+  ; .byte $8D,"updating FAT #1",0
 
   ; jsr fat32_dump_diskstats
   
@@ -640,7 +640,7 @@ fat32_updatefat:
   sta zp_sd_currentsector+3
 
   ; jsr display_message
-  ; .byte 10,13,"updating FAT #2",0
+  ; .byte $8D,"updating FAT #2",0
 
   ; jsr fat32_dump_diskstats
 
@@ -769,7 +769,7 @@ fat32_allocatefile:
   bne @nofail
 
   jsr display_message
-  .byte 10,13,"fat32_allocatefile: 0 clusters?",10,13,0
+  .byte $8D,"fat32_allocatefile: 0 clusters?",$8D,0
   
   jmp @done
 
@@ -777,8 +777,8 @@ fat32_allocatefile:
   ; This will be clustersremaining now.
   sta fat32_bytesremaining
   
-  jsr print_hex
-  jsr print_crlf
+  ;jsr print_hex
+  ;jsr print_crlf
 
   ; Divide by sectors per cluster (power of 2)
   ; If it's 1, then skip
@@ -1807,7 +1807,7 @@ fat32_dir:
   tax           ; stash file attributes in x
   beq @notadir
   jsr display_message
-  .byte "<Dir> ", 0
+  .byte "<DIR> ", 0
 
   bra @loopfilename
 @notadir:
@@ -1889,7 +1889,7 @@ fat32_prep_fileparam:
 @special_path_check:  
   ldy #$00
 ; check for '.'
-  lda (fat32_filenamepointer),y 
+  lda (fat32_filenamepointer),y
   cmp #'.'
   bne @not_special
   sta dos_file_param,y
@@ -2009,7 +2009,7 @@ fat32_open_cd:
   phy
 
   ;jsr display_message
-  ;.byte 10,13,"open_cd",0
+  ;.byte $8D,"open_cd",0
 
   ; Seek to first cluster of current directory
   lda zp_sd_cd_cluster
@@ -2043,14 +2043,14 @@ fat32_set_readbuffer:
 
 fat32_dump_fat32_address:
 ;  jsr display_message
-;  .byte 10,13,"fat32_address:          $", 0
+;  .byte $8D,"fat32_address:          $", 0
 ;  lda fat32_address+1
 ;  jsr print_hex
 ;  lda fat32_address
 ;  jsr print_hex
 
 ;  jsr display_message
-;  .byte 10,13,"zp_sd_address:          $", 0
+;  .byte $8D,"zp_sd_address:          $", 0
 ;  lda zp_sd_address+1
 ;  jsr print_hex
 ;  lda zp_sd_address
@@ -2061,7 +2061,7 @@ fat32_dump_fat32_address:
 
 fat32_start:
 ;  jsr display_message
-;  .byte 10,13, "Initializing SD card", 10, 13, 0
+;  .byte $8D, "Initializing SD card", 10, 13, 0
 
   jsr sd_init
   jsr fat32_init
@@ -2069,7 +2069,7 @@ fat32_start:
   bcc @sdinitsuccess
 
 ;  jsr display_message
-;  .byte "SD init failed", 10,13,0
+;  .byte "SD init failed", $8D,0
 
   lda fat32_errorstage
   jsr print_hex
@@ -2077,7 +2077,7 @@ fat32_start:
 
 @sdinitsuccess:
 ;  jsr display_message
-;  .byte "SD init succeeded", 10,13,0
+;  .byte "SD init succeeded", $8D,0
   
   jsr fat32_openroot
   ;jsr fat32_dump_diskstats
@@ -2160,7 +2160,7 @@ fat32_dump_diskstats:
   phy
 
   jsr display_message
-  .byte 10,13,"fat32_fatstart          $", 0
+  .byte $8D,"fat32_fatstart          $", 0
   lda #<fat32_fatstart
   sta zp_sd_temp
   lda #>fat32_fatstart
@@ -2168,7 +2168,7 @@ fat32_dump_diskstats:
   jsr print_hex_dword
 
   jsr display_message
-  .byte 10,13,"fat32_datastart         $", 0
+  .byte $8D,"fat32_datastart         $", 0
   lda #<fat32_datastart
   sta zp_sd_temp
   lda #>fat32_datastart
@@ -2176,7 +2176,7 @@ fat32_dump_diskstats:
   jsr print_hex_dword
 
   jsr display_message
-  .byte 10,13,"fat32_rootcluster       $", 0
+  .byte $8D,"fat32_rootcluster       $", 0
   lda #<fat32_rootcluster
   sta zp_sd_temp
   lda #>fat32_rootcluster
@@ -2184,19 +2184,19 @@ fat32_dump_diskstats:
   jsr print_hex_dword
 
   jsr display_message
-  .byte 10,13,"fat32_sectorspercluster $", 0
+  .byte $8D,"fat32_sectorspercluster $", 0
   lda fat32_sectorspercluster
   jsr print_hex
 
   jsr display_message
-  .byte 10,13,"fat32_pendingsectors    $", 0
+  .byte $8D,"fat32_pendingsectors    $", 0
   lda fat32_pendingsectors
   jsr print_hex
 
   jsr fat32_dump_fat32_address
 
   jsr display_message
-  .byte 10,13,"fat32_nextcluster       $", 0
+  .byte $8D,"fat32_nextcluster       $", 0
   lda #<fat32_nextcluster
   sta zp_sd_temp
   lda #>fat32_nextcluster
@@ -2204,7 +2204,7 @@ fat32_dump_diskstats:
   jsr print_hex_dword
 
   jsr display_message
-  .byte 10,13,"fat32_bytesremaining    $", 0
+  .byte $8D,"fat32_bytesremaining    $", 0
   lda #<fat32_bytesremaining
   sta zp_sd_temp
   lda #>fat32_bytesremaining
@@ -2212,7 +2212,7 @@ fat32_dump_diskstats:
   jsr print_hex_dword
 
   jsr display_message
-  .byte 10,13,"zp_sd_currentsector     $", 0
+  .byte $8D,"zp_sd_currentsector     $", 0
   lda #<zp_sd_currentsector
   sta zp_sd_temp
   lda #>zp_sd_currentsector
@@ -2220,7 +2220,7 @@ fat32_dump_diskstats:
   jsr print_hex_dword
 
   jsr display_message
-  .byte 10,13,"zp_sd_cd_cluster        $", 0
+  .byte $8D,"zp_sd_cd_cluster        $", 0
   lda #<zp_sd_cd_cluster
   sta zp_sd_temp
   lda #>zp_sd_cd_cluster
@@ -2228,7 +2228,7 @@ fat32_dump_diskstats:
   jsr print_hex_dword
 
   jsr display_message
-  .byte 10,13,"fat32_numfats           $", 0
+  .byte $8D,"fat32_numfats           $", 0
   lda fat32_numfats
   jsr print_hex
   
@@ -2242,7 +2242,7 @@ fat32_dump_diskstats:
 ;  phx
 ;  phy
 ;  jsr display_message
-;  .byte 10,13,"LFC: ",0
+;  .byte $8D,"LFC: ",0
 ;  lda #<fat32_lastfoundfreecluster
 ;  sta zp_sd_temp
 ;  lda #>fat32_lastfoundfreecluster

@@ -13,6 +13,11 @@
 DOS_hook_cout = $03ea
 ;CSWL          = $36
 
+hook_buffer_no_output:
+    pha
+    lda #$80
+    sta MUTE_OUTPUT
+    pla
 hook_buffer:
     pha
     lda #<display_apple_char
@@ -27,9 +32,9 @@ setup_cout_hook:
     pha
     lda #$20  ; JSR
     sta DOS_hook_cout
-    lda #<hook_buffer
+    lda #<hook_buffer_no_output
     sta DOS_hook_cout + 1
-    lda #>hook_buffer
+    lda #>hook_buffer_no_output
     sta DOS_hook_cout + 2
     lda #$60  ; RTS
     sta DOS_hook_cout + 3
@@ -43,7 +48,7 @@ dos:
 
 newprompt:
     jsr display_message
-    .byte 10, 13, ">", 0
+    .byte $8D, ">", 0
     ldx #0
     ldy #0
     stx dos_command
@@ -51,13 +56,15 @@ newprompt:
     stx dos_cursor
 
 read_command:
-    jsr read_char_upper
-    and #$7F
-    cmp #$0D
+    jsr RDKEY
+    ;jsr read_char_upper
+    ;and #$7F
+    cmp #$8D
     beq @do_parse_command
-    cmp #$08
+    cmp #$88
     beq @backspace
     jsr display_char
+    and #$7F
     sta dos_command,x
     inx
     bra read_command
@@ -88,9 +95,9 @@ parse_command:
     beq @process_command
     lda dos_command,y
     beq @process_command
-    cmp #$20 ; is it a space
+    cmp #' ' ; is it a space
     beq @delim
-    cmp #$2C ; is it a comma?
+    cmp #',' ; is it a comma?
     beq @delim
     bra @count_params
 @delim:
@@ -186,8 +193,10 @@ parse_command:
     jmp cmd_exit
 
 @unknown:
+    pha
     jsr display_message
-    .byte "What?", 10, 13, 0
+    .byte "WHAT?", $8D, 0
+    pla
     rts
 
 cmd_del:
@@ -268,13 +277,14 @@ cmd_chdir:
 
 display_error:
     jsr display_message
-    .byte "Err", 10, 13, 0
+    .byte "ERROR", $8D, 0
     rts
 
 display_ok:
     jsr display_message
-    .byte "OK", 10, 13, 0
+    .byte "OK", $8D, 0
     rts
+
 ; ************************************************************
 ; COMMANDS
 
@@ -285,7 +295,8 @@ cmd_dir:
     jmp fat32_dir
 
 cmd_exit:
-    jmp WOZMON
+    ;jmp WOZMON
+    jmp BREAK
 
 cmd_jump:
     ldx dos_param_0
@@ -337,13 +348,13 @@ load_proc:
 
 invalid_address:
     jsr display_message
-    .byte "Bad Address", 10, 13, 0     
+    .byte "BAD ADDRESS", $8D, 0     
     rts
 
 file_not_found:
     jsr fat32_open_cd
     jsr display_message
-    .byte "Not Found", 10, 13, 0
+    .byte "NOT FOUND", $8D, 0
     rts
 
 cmd_fload:
@@ -382,11 +393,13 @@ cmd_bsave:
 
     jsr fat32_allocatefile
 
+    ;jsr dos_setfileparam
+
     lda #<dos_file_param
     sta fat32_filenamepointer
     lda #>dos_file_param
     sta fat32_filenamepointer+1
-    
+
     jsr restore_bytesremaining
 
     jsr fat32_open_cd

@@ -86,12 +86,12 @@ CONFIG_INPUTBUFFER_0200 := 1
 .endif
 INPUTBUFFERX = INPUTBUFFER & $FF00
 
-CR=13
-LF=10
+_CR=13
+_LF=10
 
 .ifndef CRLF_1
-CRLF_1 := CR
-CRLF_2 := LF
+CRLF_1 := _CR
+CRLF_2 := _LF
 .endif
 
 
