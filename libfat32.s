@@ -273,7 +273,6 @@ fat32_init:
   sec
   rts
 
-
 fat32_seekcluster:
   ; Calculates the FAT sector given fat32_nextcluster and stores in zp_sd_currentsector
   ; Optionally will load the 512 byte FAT sector into memory at fat32_readbuffer
@@ -288,8 +287,8 @@ fat32_seekcluster:
   ; Before calling, set carry to compare the current FAT sector with lastsector.
   ; Otherwize, clear carry to force reading the FAT.
 
-  clc
   php
+  clc
 
   ; Target buffer
   jsr fat32_set_target
@@ -487,8 +486,7 @@ fat32_readnextsector:
   bmi @endofchain
 
   ; Prepare to read the next cluster
-  ;clc
-  sec
+  clc
   jsr fat32_seekcluster
   
 @readsector:
@@ -546,7 +544,7 @@ fat32_writenextsector:
   jsr fat32_set_readbuffer
 
   ; Prepare to read the next cluster
-  sec
+  clc
   jsr fat32_seekcluster
 
   pla
@@ -679,7 +677,7 @@ fat32_openroot:
   sta fat32_nextcluster+3
   sta zp_sd_cd_cluster+3
 
-  sec
+  clc
   jsr fat32_seekcluster
 
   ; Set the pointer to a large value so we always read a sector the first time through
@@ -902,6 +900,8 @@ fat32_findnextfreecluster:
   ; fat32_init will init fat32_lastfoundfreecluster to 0
 
   ; start from the last found free cluster
+  ; this is initialized to zero when library has been init
+
   lda fat32_lastfoundfreecluster
   sta fat32_nextcluster
   lda fat32_lastfoundfreecluster+1
@@ -910,32 +910,51 @@ fat32_findnextfreecluster:
   sta fat32_nextcluster+2
   lda fat32_lastfoundfreecluster+3
   sta fat32_nextcluster+3
-
-;  lda #0
-;  sta fat32_nextcluster
-;  sta fat32_lastfoundfreecluster
-;  sta fat32_nextcluster+1
-;  sta fat32_lastfoundfreecluster+1
-;  sta fat32_nextcluster+2
-;  sta fat32_lastfoundfreecluster+2
-;  sta fat32_nextcluster+3
-;  sta fat32_lastfoundfreecluster+3
-
   
-@searchclusters:
+  ; set the read buffer and target
+  jsr fat32_set_readbuffer
+  jsr fat32_set_target
+  
+  ; clear carry the first time through since we just set the
+  ; read buffer and target - make sure we're working with good data
+  ; use optimization by setting carry for subsequent calls
 
-  ; Seek cluster
+  clc
+  bcc @skipfirst
+
+@searchclusters:
   sec
+
+@skipfirst:
+  ; Seek cluster
   jsr fat32_seekcluster
 
-  ; Is the cluster free?
-  lda fat32_nextcluster
-  and #$0f
-  ora fat32_nextcluster+1
-  ora fat32_nextcluster+2
-  ora fat32_nextcluster+3
-  beq @foundcluster
+@walkfat:
+  ; read buffer has the FAT table
+  ; look through the read buffer
+  ; find a free cluster
 
+  ldy #$00
+  lda (zp_sd_address),y
+  cmp #$ff
+  bne @clusterinc
+  iny
+  lda (zp_sd_address),y
+  cmp #$ff
+  bne @clusterinc
+  iny
+  lda (zp_sd_address),y
+  cmp #$ff
+  bne @clusterinc
+  iny
+  lda (zp_sd_address),y
+  and #$0f
+  cmp #$0f
+  bne @clusterinc
+
+  bra @foundcluster
+  
+  @clusterinc:
   ; No, increment the cluster count
   inc fat32_lastfoundfreecluster
   bne @copycluster
@@ -956,7 +975,22 @@ fat32_findnextfreecluster:
   sta fat32_nextcluster+2
   lda fat32_lastfoundfreecluster+3
   sta fat32_nextcluster+3
-  
+
+  clc
+  lda zp_sd_address
+  adc #$04
+  sta zp_sd_address
+  bcc @skipinc
+  inc zp_sd_address+1
+  lda zp_sd_address+1
+  cmp #>(fat32_readbuffer + $200)
+  beq @seeknextfatcluster
+@skipinc:
+
+  bra @walkfat
+
+@seeknextfatcluster:
+
   ; Go again for another pass
   jmp @searchclusters
 
@@ -1032,7 +1066,7 @@ fat32_opendirent:
   sta zp_sd_cd_cluster
 
 @seek:
-  sec
+  clc
   jsr fat32_seekcluster
 
   ; Set the pointer to a large value so we always read a sector the first time through
@@ -1213,7 +1247,7 @@ fat32_writedirent:
   lda fat32_filecluster+3
   sta fat32_nextcluster+3
   
-  sec
+  clc
   jsr fat32_seekcluster
 
   ; Set the pointer to a large value so we always read a sector the first time through
@@ -1412,7 +1446,7 @@ fat32_deletefile:
   ldy #0
 @chainloop:
   ; Seek to cluster
-  sec
+  clc
   jsr fat32_seekcluster
 
   ; Is this the end of the chain?
@@ -2023,7 +2057,7 @@ fat32_open_cd:
 
   jsr fat32_set_readbuffer
 
-  sec
+  clc
   jsr fat32_seekcluster
   ; Set the pointer to a large value so we always read a sector the first time through
   lda #$ff
@@ -2266,7 +2300,7 @@ fat32_dump_cluster_chain:
   cmp #$FF
   beq @done
 
-  sec
+  clc
   jsr fat32_seekcluster
   jsr print_crlf
   jsr fat32_dump_clusterinfo
