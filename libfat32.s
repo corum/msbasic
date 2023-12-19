@@ -898,19 +898,21 @@ fat32_findnextfreecluster:
 
   ; Find a free cluster and store it's location in fat32_lastfoundfreecluster
   ; fat32_init will init fat32_lastfoundfreecluster to 0
+  ; if it's 0, start looking at 128
 
+  lda fat32_lastfoundfreecluster
+  ora fat32_lastfoundfreecluster+1
+  ora fat32_lastfoundfreecluster+2
+  ora fat32_lastfoundfreecluster+3
+  bne @start
+
+  lda #$3
+  sta fat32_lastfoundfreecluster
+
+@start:
   ; start from the last found free cluster
   ; this is initialized to zero when library has been init
 
-  lda fat32_lastfoundfreecluster
-  sta fat32_nextcluster
-  lda fat32_lastfoundfreecluster+1
-  sta fat32_nextcluster+1
-  lda fat32_lastfoundfreecluster+2
-  sta fat32_nextcluster+2
-  lda fat32_lastfoundfreecluster+3
-  sta fat32_nextcluster+3
-  
   ; set the read buffer and target
   jsr fat32_set_readbuffer
   jsr fat32_set_target
@@ -926,7 +928,19 @@ fat32_findnextfreecluster:
   sec
 
 @skipfirst:
+  lda fat32_lastfoundfreecluster
+  sta fat32_nextcluster
+  lda fat32_lastfoundfreecluster+1
+  sta fat32_nextcluster+1
+  lda fat32_lastfoundfreecluster+2
+  sta fat32_nextcluster+2
+  lda fat32_lastfoundfreecluster+3
+  sta fat32_nextcluster+3
+
   ; Seek cluster
+  ; jsr display_message
+  ; .byte $8D, "== seeking ==", $8D, 0
+
   jsr fat32_seekcluster
 
 @walkfat:
@@ -957,48 +971,70 @@ fat32_findnextfreecluster:
   @clusterinc:
   ; No, increment the cluster count
   inc fat32_lastfoundfreecluster
-  bne @copycluster
+  bne @advance
   inc fat32_lastfoundfreecluster+1
-  bne @copycluster
+  bne @advance
   inc fat32_lastfoundfreecluster+2
-  bne @copycluster
+  bne @advance
   inc fat32_lastfoundfreecluster+3
 
-@copycluster:
-
-  ; Copy the cluster count to the next cluster
-  lda fat32_lastfoundfreecluster
-  sta fat32_nextcluster
-  lda fat32_lastfoundfreecluster+1
-  sta fat32_nextcluster+1
-  lda fat32_lastfoundfreecluster+2
-  sta fat32_nextcluster+2
-  lda fat32_lastfoundfreecluster+3
-  sta fat32_nextcluster+3
+@advance:
+  ;jsr fat32_dump_lastfoundfreecluster
+  ;jsr print_crlf
 
   clc
   lda zp_sd_address
   adc #$04
   sta zp_sd_address
-  bcc @skipinc
-  inc zp_sd_address+1
+
   lda zp_sd_address+1
-  cmp #>(fat32_readbuffer + $200)
-  beq @seeknextfatcluster
-@skipinc:
+  adc #$0
+  sta zp_sd_address+1
+  
+  ;jsr fat32_dump_sd_address
+
+  cmp #>(fat32_readbuffer+$200)
+  beq @nextsearch
 
   bra @walkfat
 
-@seeknextfatcluster:
-
-  ; Go again for another pass
+@nextsearch:
   jmp @searchclusters
 
 @foundcluster:
   ; done.  
+
+  ; jsr display_message
+  ; .byte $8D,"**found**",$8D,0
+
   ; jsr fat32_dump_lastfoundfreecluster
+  ; jsr print_crlf
+
   ; jsr fat32_dump_clusterinfo
 
+  rts
+
+fat32_dump_sd_address:
+  pha
+  lda zp_sd_address+1
+  jsr print_hex
+  lda zp_sd_address
+  jsr print_hex
+
+  jsr print_space
+  
+  phy
+  ldy #$03
+@loop:
+  lda (zp_sd_address),Y
+  jsr print_hex
+  dey
+  bpl @loop
+
+  ply
+
+  jsr print_crlf
+  pla
   rts
 
 fat32_opendirent:
@@ -1699,7 +1735,7 @@ fat32_file_read_part:
   bcs @done
 
   jsr fat32_set_readbuffer
-  jsr fat32_decrement_bytecount
+  ;jsr fat32_decrement_bytecount
 
   ; Read entire sectors to the user-supplied buffer
 @wholesectorreadloop:
@@ -2271,21 +2307,21 @@ fat32_dump_diskstats:
   pla
   rts
 
-;fat32_dump_lastfoundfreecluster:
-;  pha
-;  phx
-;  phy
-;  jsr display_message
-;  .byte $8D,"LFC: ",0
-;  lda #<fat32_lastfoundfreecluster
-;  sta zp_sd_temp
-;  lda #>fat32_lastfoundfreecluster
-;  sta zp_sd_temp+1
-;  jsr print_hex_dword
-;  ply
-;  plx
-;  pla
-;  rts
+fat32_dump_lastfoundfreecluster:
+  pha
+  phx
+  phy
+  jsr display_message
+  .byte $8D,"LFC: ",0
+  lda #<fat32_lastfoundfreecluster
+  sta zp_sd_temp
+  lda #>fat32_lastfoundfreecluster
+  sta zp_sd_temp+1
+  jsr print_hex_dword
+  ply
+  plx
+  pla
+  rts
 
 ; assume a directory entry is loaded,
 ; set the cluster info and seek
