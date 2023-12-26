@@ -135,8 +135,14 @@ parse_command:
 @match_dc:
     jsr match_command
     .byte "DC",0
-    bcs @match_hexdump
+    bcs @match_ds
     jmp cmd_dc
+
+@match_ds:
+    jsr match_command
+    .byte "DS",0
+    bcs @match_hexdump
+    jmp cmd_ds
 
 @match_hexdump:
     jsr match_command
@@ -183,8 +189,14 @@ parse_command:
 @match_bsave:
     jsr match_command
     .byte "BSAVE",0
-    bcs @match_quit
+    bcs @match_fwrite
     jmp cmd_bsave
+
+@match_fwrite:
+    jsr match_command
+    .byte "FWRITE",0
+    bcs @match_quit
+    jmp cmd_fwrite
 
 @match_quit:
     jsr match_command
@@ -195,7 +207,7 @@ parse_command:
 @unknown:
     pha
     jsr display_message
-    .byte "WHAT?", $8D, 0
+    .byte "EH?", $8D, 0
     pla
     rts
 
@@ -240,6 +252,10 @@ cmd_dc:
     jsr fat32_dump_cluster_chain
     jsr fat32_open_cd
 
+    rts
+
+cmd_ds:
+    jsr fat32_dump_diskstats
     rts
 
 cmd_cat:
@@ -346,31 +362,16 @@ load_proc:
     stz KEYRAM
     rts
 
-invalid_address:
-    jsr display_message
-    .byte "BAD ADDRESS", $8D, 0     
-    rts
-
 file_not_found:
     jsr fat32_open_cd
     jsr display_message
     .byte "NOT FOUND", $8D, 0
     rts
 
-cmd_fload:
-    jsr load_proc_3
-    jsr fat32_file_read_part
+invalid_address:
+    jsr display_message
+    .byte "BAD ADDRESS", $8D, 0     
     rts
-
-cmd_bload:
-    jsr load_proc
-    jsr fat32_file_read
-    rts
-
-cmd_brun:
-    jsr load_proc
-    jsr fat32_file_read
-    jmp (dos_addr_temp)
 
 cmd_bsave:
     ldx dos_param_1              ; start address
@@ -426,6 +427,69 @@ cmd_bsave:
 
 @success:
     jmp display_ok
+
+cmd_fwrite:
+    ldx dos_param_1
+    jsr dos_parse_hex_address
+    bcs invalid_address
+
+    lda dos_addr_temp
+    pha
+    lda dos_addr_temp+1
+    pha
+    
+    ldx dos_param_2              ; length
+    jsr dos_parse_hex_address
+    bcs invalid_address
+
+    ldx dos_param_0
+    jsr dos_setfileparam
+
+    lda #<dos_file_param
+    sta fat32_filenamepointer
+    lda #>dos_file_param
+    sta fat32_filenamepointer+1
+
+    jsr restore_bytesremaining
+
+    jsr fat32_open_cd
+
+    jsr fat32_finddirent
+    bcs @file_not_found
+
+    jsr fat32_opendirent
+    
+    pla 
+    sta fat32_address+1
+    pla
+    sta fat32_address
+
+    ;jsr restore_bytesremaining
+
+    jsr fat32_file_write
+    bcs @error
+
+    jsr fat32_open_cd
+    rts
+@error:
+    jmp display_error
+@file_not_found:
+    jmp file_not_found
+
+cmd_fload:
+    jsr load_proc_3
+    jsr fat32_file_read_part
+    rts
+
+cmd_bload:
+    jsr load_proc
+    jsr fat32_file_read
+    rts
+
+cmd_brun:
+    jsr load_proc
+    jsr fat32_file_read
+    jmp (dos_addr_temp)
 
 restore_bytesremaining:
     lda dos_addr_temp
