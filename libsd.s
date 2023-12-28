@@ -174,6 +174,8 @@ sd_waitresult:
   jsr sd_readbyte
   cmp #$ff
   beq sd_waitresult
+  cmp #$40
+  beq sd_waitresult
   rts
 
 
@@ -300,13 +302,6 @@ sd_fail:
   ;    zp_sd_currentsector   32-bit sector number
   ;    zp_sd_address     address of buffer to take data from
   
-  phx
-  ldx #$00
-@waitloop:
-  inx
-  bne @waitloop
-  plx
-
   lda #SD_MOSI
   sta PORTA
 
