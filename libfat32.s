@@ -491,12 +491,19 @@ fat32_readnextsector:
   
 @readsector:
   dec fat32_pendingsectors
-
   jsr fat32_set_target
+
+  ; if the byte offset is > 1 cluster
+  ; skip reading
+
+  lda fat32_byte_offset+1
+  cmp #$2
+  bcs @skipread
 
   ; Read the sector
   jsr sd_readsector
 
+@skipread:
   ; Advance to next sector
   inc zp_sd_currentsector
   bne @sectorincrementdone
@@ -1391,6 +1398,14 @@ fat32_readdirent:
 
 
 fat32_finddirent:
+  lda fat32_byte_offset
+  pha
+  lda fat32_byte_offset+1
+  pha
+
+  stz fat32_byte_offset
+  stz fat32_byte_offset+1
+
   ; Finds a particular directory entry.  X,Y point to the 11-character filename to seek.
   ; The directory should already be open for iteration.
 
@@ -1398,7 +1413,7 @@ fat32_finddirent:
 @direntloop:
   jsr fat32_readdirent
   bcc @comparename
-  rts ; with carry set
+  bra @return ; with carry set
 
 ; walk through filename and paramter to see if they are exact match
 @comparename:
@@ -1407,6 +1422,13 @@ fat32_finddirent:
 
   ; Found it
   clc
+
+@return:
+  pla
+  sta fat32_byte_offset+1
+  pla
+  sta fat32_byte_offset
+
   rts
 
 fat32_finddirent_directory:
@@ -1623,11 +1645,6 @@ fat32_adjust_byte_offset:
   lda fat32_byte_offset+1
   sbc #$0   
   sta fat32_byte_offset+1
-
-;  clc
-;  lda fat32_byte_offset
-;  ora fat32_byte_offset+1
-;  beq @done
   
   ; set carry bit to indicate > 0
   sec
@@ -1744,7 +1761,7 @@ fat32_decrement_cluster:
   rts
 
 fat32_file_read:
-  ; Read afile into memory.  It's assumed the file has just been opened 
+  ; Read a file into memory.  It's assumed the file has just been opened 
   ; and no data has been read yet.
   ;
   ; fat32_byte_offset is how far to read into the file before starting to copy
@@ -1784,7 +1801,6 @@ fat32_file_read_part:
   lda fat32_address+1
   sta zp_sd_temp+1
 
-  ; subtract sector size from fat32_byte_offset
 @copypage:
   ldy #$0
   sty fat32_temp
