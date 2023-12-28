@@ -303,8 +303,8 @@ sd_fail:
   ;    zp_sd_address     address of buffer to take data from
   
   phy
-@waitouter:
   phx
+@waitouter:
   ldx #$00
 @waitloop:
   inx
