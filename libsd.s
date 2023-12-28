@@ -302,18 +302,6 @@ sd_fail:
   ;    zp_sd_currentsector   32-bit sector number
   ;    zp_sd_address     address of buffer to take data from
   
-  phy
-  phx
-@waitouter:
-  ldx #$00
-@waitloop:
-  inx
-  bne @waitloop
-  iny
-  bne @waitouter
-  plx
-  ply
-
   lda #SD_MOSI
   sta PORTA
 

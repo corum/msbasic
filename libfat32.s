@@ -1064,15 +1064,19 @@ fat32_opendirent:
   ldy #26
   lda (zp_sd_address),y
   sta fat32_nextcluster
+  sta fat32_filecluster
   iny
   lda (zp_sd_address),y
   sta fat32_nextcluster+1
+  sta fat32_filecluster+1
   ldy #20
   lda (zp_sd_address),y
   sta fat32_nextcluster+2
+  sta fat32_filecluster+2
   iny
   lda (zp_sd_address),y
   sta fat32_nextcluster+3
+  sta fat32_filecluster+3
 
   clc
   ldy #$0B
