@@ -189,14 +189,14 @@ parse_command:
 @match_bsave:
     jsr match_command
     .byte "BSAVE",0
-    bcs @match_fwrite
+    bcs @match_owrite
     jmp cmd_bsave
 
-@match_fwrite:
+@match_owrite:
     jsr match_command
-    .byte "FWRITE",0
+    .byte "OWRITE",0
     bcs @match_quit
-    jmp cmd_fwrite
+    jmp cmd_owrite
 
 @match_quit:
     jsr match_command
@@ -374,6 +374,7 @@ invalid_address:
     rts
 
 cmd_bsave:
+
     ldx dos_param_1              ; start address
     jsr dos_parse_hex_address
     bcs invalid_address
@@ -382,15 +383,15 @@ cmd_bsave:
     pha
     lda dos_addr_temp+1
     pha
-    
+
     ldx dos_param_2              ; length
     jsr dos_parse_hex_address
     bcs invalid_address
 
+    jsr restore_bytesremaining
+    
     ldx dos_param_0
     jsr dos_setfileparam
-
-    jsr restore_bytesremaining
 
     jsr fat32_allocatefile
 
@@ -400,8 +401,6 @@ cmd_bsave:
     sta fat32_filenamepointer
     lda #>dos_file_param
     sta fat32_filenamepointer+1
-
-    jsr restore_bytesremaining
 
     jsr fat32_open_cd
 
@@ -428,19 +427,8 @@ cmd_bsave:
 @success:
     jmp display_ok
 
-cmd_fwrite:
-    ldx dos_param_1
-    jsr dos_parse_hex_address
-    bcs invalid_address
-
-    lda dos_addr_temp
-    pha
-    lda dos_addr_temp+1
-    pha
-    
-    ldx dos_param_2              ; length
-    jsr dos_parse_hex_address
-    bcs invalid_address
+cmd_owrite:
+    jsr fat32_open_cd
 
     ldx dos_param_0
     jsr dos_setfileparam
@@ -450,21 +438,24 @@ cmd_fwrite:
     lda #>dos_file_param
     sta fat32_filenamepointer+1
 
+    jsr fat32_finddirent
+    bcs @bsave_instead
+    jsr fat32_opendirent
+
+    ldx dos_param_2              ; length
+    jsr dos_parse_hex_address
+    bcs @invalid_address
+
     jsr restore_bytesremaining
 
-    jsr fat32_open_cd
+    ldx dos_param_1
+    jsr dos_parse_hex_address
+    bcs @invalid_address
 
-    jsr fat32_finddirent
-    bcs @file_not_found
-
-    jsr fat32_opendirent
-    
-    pla 
-    sta fat32_address+1
-    pla
+    lda dos_addr_temp
     sta fat32_address
-
-    ;jsr restore_bytesremaining
+    lda dos_addr_temp+1
+    sta fat32_address+1
 
     jsr fat32_file_write
     bcs @error
@@ -473,8 +464,12 @@ cmd_fwrite:
     rts
 @error:
     jmp display_error
-@file_not_found:
-    jmp file_not_found
+@bsave_instead:
+    jmp cmd_bsave
+@invalid_address:
+    jsr display_message
+    .byte "BAD ADDRESS", $8D, 0     
+    rts
 
 cmd_fload:
     jsr load_proc_3
