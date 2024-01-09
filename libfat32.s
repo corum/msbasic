@@ -48,7 +48,7 @@
 ; 26-27   Starting cluster (0 for an empty file)
 ; 28-31   Filesize in bytes
 
-zp_fat32_variables      = $70
+zp_fat32_variables      = $B0
 
 zp_sd_currentsector             = zp_fat32_variables + $00  ; 4 bytes 
 zp_sd_temp                      = zp_fat32_variables + $04  ; 4 bytes
@@ -481,9 +481,10 @@ fat32_readnextsector:
   lda fat32_pendingsectors
   bne @readsector
 
-  ; No pending sectors, check for end of cluster chain
-  lda fat32_nextcluster+3
-  bmi @endofchain
+  ; No pending sectors, check for end of cluster chain 
+  clc
+  jsr fat32_IsEndOfChain
+  bcs @endofchain
 
   ; Prepare to read the next cluster
   clc
@@ -493,7 +494,7 @@ fat32_readnextsector:
   dec fat32_pendingsectors
   jsr fat32_set_target
 
-  ; if the byte offset is > 1 cluster
+  ; if the byte offset is >= 1 cluster
   ; skip reading
 
   lda fat32_byte_offset+1
