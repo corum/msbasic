@@ -20,6 +20,12 @@ PORTB   = $C200
 PORTA   = $C20F     ; PORTA is register 1, this is PORTA with no handshake
 DDRB    = $C202
 DDRA    = $C203
+T1CL    = $C204
+T1CH    = $C205
+T1LL    = $C206
+T1LH    = $C207
+T2L     = $C208
+T2H     = $C209
 SHCTL   = $C20A
 ACR     = $C20B     ; auxiliary control register
 PCR     = $C20C     ; peripheral control register
@@ -48,9 +54,7 @@ MSG_ADDR_HIGH  = $B7
 
 ;VIA config flags 
 ICLR   = %01111111  ; clear all VIA interrupts
-IMASK  = %10000001 ; enable interrupt for CA2
-CFGCA  = %00000010  ; configure CA2 for negative active edge for PS/2 clock
-ACRCFG = %00000011 ; enable latching
+CFGCA  = %00100010  ; configure CA2 for negative active edge for PS/2 clock
 
 ;SD card pins
 SD_CS   = %00010000
@@ -176,10 +180,13 @@ via_init:
     sta DDRA
 
     lda #CFGCA
-    sta PCR        ; configure CA2 for negative edge independent interrupt, for PS/2
+    sta PCR        ; configure CA2 for negative edge independent interrupt, for PS/2, CB2 for negative interrupt for keyboard strobe
 
-    lda #$81
-    sta IER        ; enable interrupts for CA2
+    lda #$0
+    sta ACR
+
+    lda #%11111001 
+    sta IER        ; enable interrupts for CA2, CB1, CB2 and Timer1, Timer2
 
     rts
 
@@ -326,6 +333,27 @@ MSG_FILE_ERROR:
     .byte "ERROR"
     .byte CR,LF,0
 
+
+joytest:
+    
+    jsr display_message
+    .byte "X=",0
+
+    ldx #$0
+    jsr PREAD
+    tya
+    jsr print_hex
+
+    jsr display_message
+    .byte ",Y=",0
+
+    ldx #$1
+    jsr PREAD
+    tya
+    jsr print_hex
+    jsr print_crlf
+
+    jmp joytest
 
 .segment "CODE"
 
@@ -1493,14 +1521,28 @@ nmi:
 
     ; check the IFR to see if it's the VIA - aka the keyboard
     lda IFR
-    and #$1
-    bne @ps2_keyboard_decode
+    ror                        ; CA2
+    bcs @ps2_keyboard_decode_short
+    ror                        ; CA1
+    bcs @CA1
+    ror                        ;Shift Register
+    bcs @shift
+    ror                        ; CB2
+    bcs @joystick          
+    ror                        ; CB1
+    bcs @kbstrobe
+    ror                        ; T2
+    bcs @T2
+    ror                        ; T1
+    bcs @T1
+
 @unknown_irq:
     lda #$41
     jsr tx_char_sync
-
     jmp @exit
 
+@ps2_keyboard_decode_short:
+    jmp @ps2_keyboard_decode
 
 @irq_receive:
     ; we now have the byte, we need to add it to the keyboard buffer
@@ -1512,6 +1554,94 @@ nmi:
     inc KBCURR
     jmp @exit
 
+@kbstrobe:
+    lda $C000     ; strip off the high bit
+    and #$7F
+    sta $C000
+    jmp @exit
+
+@T2:
+    lda T2L  ; clear the interrupt
+
+    ; if neither left or right are down, we're at midpoint, discharge virtual capacitor now
+    ; cap is discharged by setting to 0
+
+    lda KEYSTATE + $6B ; left
+    ora KEYSTATE + $74 ; right
+    ror
+    ror
+    sta $C064
+
+    ; same for up/down
+    lda KEYSTATE + $75 ; up
+    ora KEYSTATE + $73 ; down
+    ror
+    ror
+    sta $C065
+
+    jmp @exit
+
+@CA1:
+    lda #$47
+    jsr tx_char_sync
+    jmp @exit
+    
+@shift:
+    lda #$46
+    jsr tx_char_sync
+    jmp @exit
+
+@T1:
+    lda T1CL ; clear the interrupt flag
+    ; clear bit 8 on both, we're done - our virtual capacitors have discharged
+    lda #$00
+    sta $C064
+    sta $C065
+    jmp @exit
+
+;OPNAPPLE = $C061 ;open apple (command) key data (read)
+;CLSAPPLE = $C062 ;closed apple (option) key data (read)
+;These are actually the first two game Pushbutton inputs (PB0
+;and PB1) which are borrowed by the Open Apple and Closed Apple
+;keys. Bit 7 is set (=1) in these locations if the game switch or
+;corresponding key is pressed.
+
+;PB2 =      $C063 ;game Pushbutton 2 (read)
+;This input has an option to be connected to the shift key on
+;the keyboard. (See info on the 'shift key mod'.)
+
+;PADDLE0 =  $C064 ;bit 7 = status of pdl-0 timer (read)
+;PADDLE1 =  $C065 ;bit 7 = status of pdl-1 timer (read)
+;PADDLE2 =  $C066 ;bit 7 = status of pdl-2 timer (read)
+;PADDLE3 =  $C067 ;bit 7 = status of pdl-3 timer (read)
+;PDLTRIG =  $C070 ;trigger paddles
+;Read this to start paddle countdown, then time the period until
+;$C064-$C067 bit 7 becomes set to determine the paddle position.
+;This takes up to three milliseconds if the paddle is at its maximum
+;extreme (reading of 255 via the standard firmware routine).
+
+@joystick:
+    lda KEYSTATE + $6B ; left
+    ror
+    ror
+    eor #$80
+    sta $C064
+    lda KEYSTATE + $75 ; up
+    ror
+    ror
+    eor #$80
+    sta $C065
+    
+    lda #$B0
+    sta T2L
+    lda #$5
+    sta T2H  ; set T2 for half way
+
+    lda #$80
+    sta T1CL
+    lda #$0B
+    sta T1CH  ; Set T2 for end
+    jmp @exit
 
 @ps2_keyboard_decode:
     lda PORTA
@@ -1704,6 +1834,22 @@ nmi:
 
     lda #ICLR 
     sta IFR   ; clear all VIA interrupts
+
+    lda #$00
+    sta $C061
+    sta $C062
+
+    lda KEYSTATE + $6C  ; button 1
+    beq @checkbutton2
+    ; button pressed
+    lda #$80
+    sta $C061
+@checkbutton2:
+    lda KEYSTATE + $7D  ; button 2
+    beq @btndone
+    lda #$80
+    sta $C062
+@btndone:
 
     ply
     plx
