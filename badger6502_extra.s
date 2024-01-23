@@ -1528,14 +1528,14 @@ nmi:
     ror                        ;Shift Register
     bcs @shift
     ror                        ; CB2
-    bcs @joystick          
+    bcs @joystick_short          
     ror                        ; CB1
     bcs @kbstrobe
     ror                        ; T2
     bcs @T2
     ror                        ; T1
     bcs @T1
-
+    
 @unknown_irq:
     lda #$41
     jsr tx_char_sync
@@ -1543,6 +1543,9 @@ nmi:
 
 @ps2_keyboard_decode_short:
     jmp @ps2_keyboard_decode
+
+@joystick_short:
+    jmp @joystick
 
 @irq_receive:
     ; we now have the byte, we need to add it to the keyboard buffer
@@ -1571,6 +1574,7 @@ nmi:
     ror
     ror
     sta $C064
+    sta $C066
 
     ; same for up/down
     lda KEYSTATE + $75 ; up
@@ -1578,7 +1582,7 @@ nmi:
     ror
     ror
     sta $C065
-
+    sta $C067
     jmp @exit
 
 @CA1:
@@ -1591,12 +1595,45 @@ nmi:
     jsr tx_char_sync
     jmp @exit
 
+
 @T1:
     lda T1CL ; clear the interrupt flag
+
+    lda $C071
+    beq @end_discharge
+
+@early_discharge:    
+    lda #$00
+    sta $C071
+
+    lda KEYSTATE + $6B ; left
+    ror
+    ror
+    eor #$80
+    sta $C064
+    sta $C066
+    lda KEYSTATE + $75 ; up
+    ror
+    ror
+    eor #$80
+    sta $C065
+    sta $C067
+
+    lda #$00
+    sta T1CL
+    lda #$0B
+    sta T1CH  ; Set T1 for end discharge check
+
+    jmp @exit
+
+@end_discharge:
     ; clear bit 8 on both, we're done - our virtual capacitors have discharged
     lda #$00
     sta $C064
     sta $C065
+    sta $C066
+    sta $C067
+
     jmp @exit
 
 ;OPNAPPLE = $C061 ;open apple (command) key data (read)
@@ -1621,27 +1658,25 @@ nmi:
 ;extreme (reading of 255 via the standard firmware routine).
 
 @joystick:
-    lda KEYSTATE + $6B ; left
-    ror
-    ror
-    eor #$80
+    lda #$80
+    sta $C071
     sta $C064
-    lda KEYSTATE + $75 ; up
-    ror
-    ror
-    eor #$80
     sta $C065
-    
-    lda #$B0
+    sta $C066
+    sta $C067
+
+    lda #$58
     sta T2L
-    lda #$5
+    lda #$6
     sta T2H  ; set T2 for half way
 
-    lda #$80
+    lda #$40
     sta T1CL
-    lda #$0B
-    sta T1CH  ; Set T2 for end
+    lda #$00
+    sta T1CH  ; Set T1 for early discharge check
+
     jmp @exit
+
 
 @ps2_keyboard_decode:
     lda PORTA
