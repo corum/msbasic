@@ -4,33 +4,33 @@
 .segment "BANKROM"
 
 ;Keyboard
-KEYRAM  = $C000
+KEYRAM         = $C000
 
 ;ACIA C0
-A_RXD   = $C100
-A_TXD   = $C100
-A_STS   = $C101
-A_RES   = $C101
-A_CMD   = $C102
-A_CTL   = $C103
+A_RXD          = $C100
+A_TXD          = $C100
+A_STS          = $C101
+A_RES          = $C101
+A_CMD          = $C102
+A_CTL          = $C103
 
 ; devices
 ;VIA D1
-PORTB   = $C200
-PORTA   = $C20F     ; PORTA is register 1, this is PORTA with no handshake
-DDRB    = $C202
-DDRA    = $C203
-T1CL    = $C204
-T1CH    = $C205
-T1LL    = $C206
-T1LH    = $C207
-T2L     = $C208
-T2H     = $C209
-SHCTL   = $C20A
-ACR     = $C20B     ; auxiliary control register
-PCR     = $C20C     ; peripheral control register
-IFR     = $C20D 
-IER     = $C20E     ; interrupt enable register
+PORTB          = $C200
+PORTA          = $C20F     ; PORTA is register 1, this is PORTA with no handshake
+DDRB           = $C202
+DDRA           = $C203
+T1CL           = $C204
+T1CH           = $C205
+T1LL           = $C206
+T1LH           = $C207
+T2L            = $C208
+T2H            = $C209
+SHCTL          = $C20A
+ACR            = $C20B     ; auxiliary control register
+PCR            = $C20C     ; peripheral control register
+IFR            = $C20D 
+IER            = $C20E     ; interrupt enable register
 
 ;ROMDISK
 RD_LOW         = $C300
@@ -53,14 +53,14 @@ MSG_ADDR_LOW   = $B6
 MSG_ADDR_HIGH  = $B7
 
 ;VIA config flags 
-ICLR   = %01111111  ; clear all VIA interrupts
-CFGCA  = %00100010  ; configure CA2 for negative active edge for PS/2 clock
+ICLR           = %01111111  ; clear all VIA interrupts
+CFGCA          = %00100010  ; configure CA2 for negative active edge for PS/2 clock
 
 ;SD card pins
-SD_CS   = %00010000
-SD_SCK  = %00001000
-SD_MOSI = %00000100
-SD_MISO = %00000010
+SD_CS          = %00010000
+SD_SCK         = %00001000
+SD_MOSI        = %00000100
+SD_MISO        = %00000010
 
 PORTA_OUTPUTPINS = %11100000 | SD_CS | SD_SCK | SD_MOSI
 
@@ -205,6 +205,12 @@ init:
     sta KBDBG2
     sta KEYTEMP
     sta KEYLAST
+
+    ; init joystick
+    sta $C064
+    sta $C065
+    sta $C066
+    sta $C067
 
     sta MUTE_OUTPUT
 
@@ -1518,34 +1524,7 @@ nmi:
     lda A_STS
     and #%00001000   ; check receive bit
     bne @irq_receive
-
-    ; check the IFR to see if it's the VIA - aka the keyboard
-    lda IFR
-    ror                        ; CA2
-    bcs @ps2_keyboard_decode_short
-    ror                        ; CA1
-    bcs @CA1
-    ror                        ;Shift Register
-    bcs @shift
-    ror                        ; CB2
-    bcs @joystick_short          
-    ror                        ; CB1
-    bcs @kbstrobe
-    ror                        ; T2
-    bcs @T2
-    ror                        ; T1
-    bcs @T1
-    
-@unknown_irq:
-    lda #$41
-    jsr tx_char_sync
-    jmp @exit
-
-@ps2_keyboard_decode_short:
-    jmp @ps2_keyboard_decode
-
-@joystick_short:
-    jmp @joystick
+    beq @check_via_interrupts
 
 @irq_receive:
     ; we now have the byte, we need to add it to the keyboard buffer
@@ -1557,83 +1536,57 @@ nmi:
     inc KBCURR
     jmp @exit
 
+@ps2_keyboard_decode_short:
+    jmp @ps2_keyboard_decode
+
+@joystick_short:
+    jmp @joystick
+
+@check_via_interrupts:
+    ; check the IFR to see if it's the VIA - aka the keyboard
+    lda IFR
+    rol
+    rol
+    bcs @T1                         ; bit 6
+    rol
+    bcs @T2                         ; bit 5
+    rol
+    bcs @kbstrobe                   ; bit 4
+    rol
+    bcs @joystick_short             ; bit 3
+    rol
+    bcs @shift                      ; bit 2
+    rol
+    bcs @CA1                        ; bit 1
+    rol
+    bcs @ps2_keyboard_decode_short  ; bit 0
+    
+@unknown_irq:
+    lda #$41
+    jsr tx_char_sync
+    jmp @exit
+
 @kbstrobe:
     lda $C000     ; strip off the high bit
     and #$7F
-    sta $C000
-    jmp @exit
-
-@T2:
-    lda T2L  ; clear the interrupt
-
-    ; if neither left or right are down, we're at midpoint, discharge virtual capacitor now
-    ; cap is discharged by setting to 0
-
-    lda KEYSTATE + $6B ; left
-    ora KEYSTATE + $74 ; right
-    ror
-    ror
-    sta $C064
-    sta $C066
-
-    ; same for up/down
-    lda KEYSTATE + $75 ; up
-    ora KEYSTATE + $73 ; down
-    ror
-    ror
-    sta $C065
-    sta $C067
+    sta $C000  
+    lda PORTB
     jmp @exit
 
 @CA1:
     lda #$47
     jsr tx_char_sync
+    
+    lda #$2
+    sta IFR
     jmp @exit
     
 @shift:
     lda #$46
     jsr tx_char_sync
-    jmp @exit
 
-
-@T1:
-    lda T1CL ; clear the interrupt flag
-
-    lda $C071
-    beq @end_discharge
-
-@early_discharge:    
-    lda #$00
-    sta $C071
-
-    lda KEYSTATE + $6B ; left
-    ror
-    ror
-    eor #$80
-    sta $C064
-    sta $C066
-    lda KEYSTATE + $75 ; up
-    ror
-    ror
-    eor #$80
-    sta $C065
-    sta $C067
-
-    lda #$00
-    sta T1CL
-    lda #$0B
-    sta T1CH  ; Set T1 for end discharge check
-
-    jmp @exit
-
-@end_discharge:
-    ; clear bit 8 on both, we're done - our virtual capacitors have discharged
-    lda #$00
-    sta $C064
-    sta $C065
-    sta $C066
-    sta $C067
-
+    lda #$4
+    sta IFR
     jmp @exit
 
 ;OPNAPPLE = $C061 ;open apple (command) key data (read)
@@ -1657,26 +1610,77 @@ nmi:
 ;This takes up to three milliseconds if the paddle is at its maximum
 ;extreme (reading of 255 via the standard firmware routine).
 
-@joystick:
-    lda #$80
-    sta $C071
+@T2:
+    ; if neither left or right are down, we're at midpoint, discharge virtual capacitor now
+    ; cap is discharged by setting to 0
+
+    lda T2L  ; clear the interrupt
+
+    clc
+    ;lda KEYSTATE + $6B ; left
+    lda KEYSTATE + $74 ; right
+    ror
+    ror
+    ora #$7F
+    sta $C064
+
+    ; same for up/down
+    clc
+    ;lda KEYSTATE + $75 ; up
+    lda KEYSTATE + $73 ; 5 on numpad
+    ora KEYSTATE + $72 ; down arrow
+    ror
+    ror
+    ora #$7F
+    sta $C065
+
+    jmp @exit
+
+@T1:
+    lda T1CL ; clear the interrupt flag
+
+    ; clear bit 7 on both, we're done - our virtual capacitors have discharged
+    lda #$7F
     sta $C064
     sta $C065
     sta $C066
     sta $C067
 
-    lda #$58
+    jmp @exit
+
+@joystick:
+    lda #$FF
+    sta $C064
+    sta $C065
+
+    lda #$5C
     sta T2L
     lda #$6
     sta T2H  ; set T2 for half way
 
-    lda #$40
-    sta T1CL
     lda #$00
-    sta T1CH  ; Set T1 for early discharge check
+    sta T1CL
+    lda #$0D
+    sta T1CH  ; Set T1 for end discharge check
 
+    clc
+    lda KEYSTATE + $75 ; up
+    eor #$01
+    ror
+    ror
+    ora #$7F
+    sta $C065
+
+    clc
+    lda KEYSTATE + $6B ; left
+    eor #$01
+    ror
+    ror
+    ora #$7F
+    sta $C064
+
+    lda PORTB  ; clear the interrupt
     jmp @exit
-
 
 @ps2_keyboard_decode:
     lda PORTA
@@ -1704,7 +1708,6 @@ nmi:
     ; should never get here
     jmp @exit
 
-    
 @start:
     ; should be zero - maybe check later
     lda #PS2_KEYS
@@ -1713,7 +1716,7 @@ nmi:
     sta KBBIT   ; reset to bit zero
     sta KBTEMP  ; clear the temp key
     inc KBDBG
-    jmp @exit
+    jmp @clear_ca1
 
 @keys:
     clc
@@ -1725,19 +1728,19 @@ nmi:
     lda KBBIT
     cmp #$08
     beq @toparity
-    jmp @exit
+    jmp @clear_ca1
 
 @toparity:
     lda #PS2_PARITY
     sta KBSTATE
-    jmp @exit
+    jmp @clear_ca1
 
 @parity:
     ; should probably check the parity bit - all 1 data bits + parity bit should be odd #
     lda #PS2_STOP
     sta KBSTATE
     inc KBDBG
-    jmp @exit
+    jmp @clear_ca1
 
 @stop:
     ; write our temp kb to kbbuf
@@ -1751,7 +1754,7 @@ nmi:
     cmp #$E0           ; set the extended bit if it's an extended character
     bne @notextended
     sta KBEXTEND
-    jmp @exit          ; updated the state as extended, we're done here
+    jmp @clear_ca1          ; updated the state as extended, we're done here
 
 @notextended:
     cmp #$F0           ; set the key up bit if it's a key up
@@ -1759,7 +1762,7 @@ nmi:
     sta KBKEYUP
     lda #$00
     sta KEYRAM
-    jmp @exit          ; updated key up state, we're done here
+    jmp @clear_ca1          ; updated key up state, we're done here
  
 @notkeyup:
     lda KBKEYUP        ; check the key up flag
@@ -1776,11 +1779,11 @@ nmi:
 
     cpx #$58
     bne @clear
-    jmp @exit
+    jmp @clear_ca1
 
 @clear:
     sta KEYSTATE,x
-    jmp @exit
+    jmp @clear_ca1
 
 @setkeystate:          ; set the key state - this is key down path
     ldx KBTEMP
@@ -1813,7 +1816,6 @@ nmi:
     lda KEYSTATE,x
     bne @shifted
 
-
     ; check for control state
     ldx #$14
     lda KEYSTATE,x
@@ -1832,7 +1834,7 @@ nmi:
     @caps:
     sta KEYRAM
     inc KBCURR
-    jmp @exit    
+    jmp @clear_ca1    
     
 @shifted:
     ldx KBTEMP
@@ -1842,7 +1844,7 @@ nmi:
     ora #$80
     sta KEYRAM
     inc KBCURR
-    jmp @exit
+    jmp @clear_ca1
 
 @control:
     ldx KBTEMP
@@ -1851,7 +1853,7 @@ nmi:
     ;sta KBBUF, x
     sta KEYRAM
     inc KBCURR
-    jmp @exit
+    jmp @clear_ca1
 
 @capstoggle:
     lda KEYSTATE,X
@@ -1865,26 +1867,22 @@ nmi:
     sta KEYSTATE,x
 
 @nonprint:
+@clear_ca1:
+    lda #$7F
+    sta IFR
+
 @exit:
-
-    lda #ICLR 
-    sta IFR   ; clear all VIA interrupts
-
-    lda #$00
-    sta $C061
-    sta $C062
-
-    lda KEYSTATE + $6C  ; button 1
-    beq @checkbutton2
     ; button pressed
-    lda #$80
+    clc
+    lda KEYSTATE + $6C  ; button 1
+    ror
+    ror
     sta $C061
-@checkbutton2:
+     
     lda KEYSTATE + $7D  ; button 2
-    beq @btndone
-    lda #$80
+    ror
+    ror
     sta $C062
-@btndone:
 
     ply
     plx
@@ -1893,7 +1891,7 @@ nmi:
     rti
 
 do_nothing:
-                RTS
+    RTS
 
 .segment "DATASEG"
 ; ============================================================================================
@@ -1942,7 +1940,6 @@ ps2_ascii_control:
   .byte $00, $00, $A2, $00, "{", "+", $00, $00, $00, $00, $8D, "}", $00, "|", $00, $00; 5
   .byte $00, $00, $00, $00, $00, $00, $08, $00, $00, $00, $00, $00, $00, $00, $00, $00; 6
   .byte $00, $00, $00, $00, $00, $00, $1B, $00, $00, $00, $00, $00, $00, $00, $00, $00; 7
-
 
 ; ebadger6502 high res lookup tables
 ;eb_hires1_msb:
@@ -2047,8 +2044,6 @@ ps2_ascii_control:
 ;        .byte $28,$A8,$28,$A8
 ;        .byte $50,$D0,$50,$D0
 ;        .byte $50,$D0,$50,$D0
-
-
 
 ; ****************************************************************************************************************
 ;  The WOZ Monitor for the Apple 1
