@@ -1893,6 +1893,24 @@ nmi:
 do_nothing:
     RTS
 
+.segment "RETURN"
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+
 .segment "DATASEG"
 ; ============================================================================================
 ; data
