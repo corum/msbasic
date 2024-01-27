@@ -1617,7 +1617,6 @@ nmi:
     lda T2L  ; clear the interrupt
 
     clc
-    ;lda KEYSTATE + $6B ; left
     lda KEYSTATE + $74 ; right
     ror
     ror
@@ -1626,7 +1625,6 @@ nmi:
 
     ; same for up/down
     clc
-    ;lda KEYSTATE + $75 ; up
     lda KEYSTATE + $73 ; 5 on numpad
     ora KEYSTATE + $72 ; down arrow
     ror
@@ -1658,9 +1656,9 @@ nmi:
     lda #$6
     sta T2H  ; set T2 for half way
 
-    lda #$00
+    lda #$80
     sta T1CL
-    lda #$0D
+    lda #$0C
     sta T1CH  ; Set T1 for end discharge check
 
     clc
@@ -1875,11 +1873,13 @@ nmi:
     ; button pressed
     clc
     lda KEYSTATE + $6C  ; button 1
+    ora KEYSTATE + $12  ; shift key
     ror
     ror
     sta $C061
      
     lda KEYSTATE + $7D  ; button 2
+    ora KEYSTATE + $14  ; ctrl key
     ror
     ror
     sta $C062
@@ -1910,7 +1910,263 @@ do_nothing:
     rts
     rts
     rts
-
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    rts
+    
 .segment "DATASEG"
 ; ============================================================================================
 ; data
