@@ -17,7 +17,7 @@ A_CTL          = $C103
 ; devices
 ;VIA D1
 PORTB          = $C200
-PORTA          = $C20F     ; PORTA is register 1, this is PORTA with no handshake
+PORTA          = $C201
 DDRB           = $C202
 DDRA           = $C203
 T1CL           = $C204
@@ -332,34 +332,13 @@ _loderunner:
 
 
 MSG_FILENOTFOUND:
-    .byte "NOT FOUND"
+    .byte "NOTFOUND"
     .byte CR,LF,0
 
 MSG_FILE_ERROR:
-    .byte "ERROR"
+    .byte "ERR"
     .byte CR,LF,0
 
-
-joytest:
-    
-    jsr display_message
-    .byte "X=",0
-
-    ldx #$0
-    jsr PREAD
-    tya
-    jsr print_hex
-
-    jsr display_message
-    .byte ",Y=",0
-
-    ldx #$1
-    jsr PREAD
-    tya
-    jsr print_hex
-    jsr print_crlf
-
-    jmp joytest
 
 .segment "CODE"
 
@@ -1440,6 +1419,49 @@ _cls:
 ;    rts
 
 .segment "BANKROM"
+
+; some test routines
+
+keytest:
+    lda KEYRAM
+    jsr print_hex
+    jsr print_space
+    lda KBTEMP
+    jsr print_hex
+    jsr print_crlf
+    jmp keytest
+
+joytest:
+    jsr display_message
+    .byte "X=",0
+
+    ldx #$0
+    jsr PREAD
+    tya
+    jsr print_hex
+
+    jsr display_message
+    .byte ",Y=",0
+
+    ldx #$1
+    jsr PREAD
+    tya
+    jsr print_hex
+
+    lda $C061
+    jsr print_space
+    jsr print_hex
+    
+    jsr print_space
+
+    lda $C062
+    jsr print_hex
+
+    jsr print_crlf
+
+    jmp joytest
+
+
 ; ============================================================================================
 ; ROMDISK routines
 ; ============================================================================================
@@ -1517,8 +1539,6 @@ irq:
 nmi:
     pha
     phx
-    phy
-    
     ; check the ACIA status register to see if we've received data
     ; reading the status register clears the irq bit
     lda A_STS
@@ -1545,21 +1565,20 @@ nmi:
 @check_via_interrupts:
     ; check the IFR to see if it's the VIA - aka the keyboard
     lda IFR
-    rol
-    rol
-    bcs @T1                         ; bit 6
-    rol
-    bcs @T2                         ; bit 5
-    rol
-    bcs @kbstrobe                   ; bit 4
-    rol
-    bcs @joystick_short             ; bit 3
-    rol
-    bcs @shift                      ; bit 2
-    rol
-    bcs @CA1                        ; bit 1
-    rol
+    ror
     bcs @ps2_keyboard_decode_short  ; bit 0
+    ror
+    bcs @CA1                        ; bit 1
+    ror
+    bcs @shift                      ; bit 2
+    ror
+    bcs @joystick_short             ; bit 3
+    ror
+    bcs @kbstrobe                   ; bit 4
+    ror
+    bcs @T2                         ; bit 5
+    ror
+    bcs @T1                         ; bit 6
     
 @unknown_irq:
     lda #$41
@@ -1576,9 +1595,8 @@ nmi:
 @CA1:
     lda #$47
     jsr tx_char_sync
-    
-    lda #$2
-    sta IFR
+
+    lda PORTA
     jmp @exit
     
 @shift:
@@ -1616,22 +1634,34 @@ nmi:
 
     lda T2L  ; clear the interrupt
 
+    lda $C064
+    bpl @yaxis
+
     clc
     lda KEYSTATE + $74 ; right
+    ora KEYSTATE + $8D ; right/up
+    ora KEYSTATE + $7A ; right/down
     ror
     ror
     ora #$7F
     sta $C064
 
+@yaxis:
+    lda $C065
+    bpl @done
+
     ; same for up/down
     clc
-    lda KEYSTATE + $73 ; 5 on numpad
+    lda KEYSTATE + $73 ; 5 on numpad - treat as down for convenience
     ora KEYSTATE + $72 ; down arrow
+    ora KEYSTATE + $69 ; down/left
+    ora KEYSTATE + $7A ; down/right
     ror
     ror
     ora #$7F
     sta $C065
 
+@done:
     jmp @exit
 
 @T1:
@@ -1651,18 +1681,20 @@ nmi:
     sta $C064
     sta $C065
 
-    lda #$5C
+    lda #$D8
     sta T2L
-    lda #$6
+    lda #$5
     sta T2H  ; set T2 for half way
 
-    lda #$80
+    lda #$90
     sta T1CL
-    lda #$0C
+    lda #$0B
     sta T1CH  ; Set T1 for end discharge check
 
     clc
     lda KEYSTATE + $75 ; up
+    ora KEYSTATE + $6C ; up/left
+    ora KEYSTATE + $7D ; up/right
     eor #$01
     ror
     ror
@@ -1671,6 +1703,8 @@ nmi:
 
     clc
     lda KEYSTATE + $6B ; left
+    ora KEYSTATE + $6C ; left/up
+    ora KEYSTATE + $69 ; left/down
     eor #$01
     ror
     ror
@@ -1713,36 +1747,36 @@ nmi:
     lda #00
     sta KBBIT   ; reset to bit zero
     sta KBTEMP  ; clear the temp key
-    inc KBDBG
-    jmp @clear_ca1
+    ;inc KBDBG
+    jmp @exit
 
 @keys:
     clc
     ror KBTEMP
     ora KBTEMP
     sta KBTEMP
-    inc KBDBG
+    ;inc KBDBG
     inc KBBIT
     lda KBBIT
     cmp #$08
     beq @toparity
-    jmp @clear_ca1
+    jmp @exit
 
 @toparity:
     lda #PS2_PARITY
     sta KBSTATE
-    jmp @clear_ca1
+    jmp @exit
 
 @parity:
     ; should probably check the parity bit - all 1 data bits + parity bit should be odd #
     lda #PS2_STOP
     sta KBSTATE
-    inc KBDBG
-    jmp @clear_ca1
+    ;inc KBDBG
+    jmp @exit
 
 @stop:
     ; write our temp kb to kbbuf
-    inc KBDBG
+    ;inc KBDBG
     lda #PS2_START
     sta KBSTATE
     
@@ -1752,7 +1786,7 @@ nmi:
     cmp #$E0           ; set the extended bit if it's an extended character
     bne @notextended
     sta KBEXTEND
-    jmp @clear_ca1          ; updated the state as extended, we're done here
+    jmp @exit          ; updated the state as extended, we're done here
 
 @notextended:
     cmp #$F0           ; set the key up bit if it's a key up
@@ -1760,7 +1794,7 @@ nmi:
     sta KBKEYUP
     lda #$00
     sta KEYRAM
-    jmp @clear_ca1          ; updated key up state, we're done here
+    jmp @checkbuttons          ; updated key up state, we're done here
  
 @notkeyup:
     lda KBKEYUP        ; check the key up flag
@@ -1777,11 +1811,11 @@ nmi:
 
     cpx #$58
     bne @clear
-    jmp @clear_ca1
+    jmp @checkbuttons
 
 @clear:
     sta KEYSTATE,x
-    jmp @clear_ca1
+    jmp @checkbuttons
 
 @setkeystate:          ; set the key state - this is key down path
     ldx KBTEMP
@@ -1794,7 +1828,8 @@ nmi:
     stx KEYLAST
 
     ; check for non printable 
-    ldx KBTEMP         ; store in buffer only if it's a key down for now
+    ; x already contains KBTEMP
+    ;ldx KBTEMP         ; store in buffer only if it's a key down for now
     
     cpx #$12          ; left shfit
     beq @nonprint
@@ -1806,17 +1841,12 @@ nmi:
     beq @nonprint 
 
     ; check for shift state
-    ldx #$12
-    lda KEYSTATE,x
+    lda KEYSTATE + $12
+    ora KEYSTATE + $59
     bne @shifted
     
-    ldx #$59
-    lda KEYSTATE,x
-    bne @shifted
-
     ; check for control state
-    ldx #$14
-    lda KEYSTATE,x
+    lda KEYSTATE + $14
     bne @control
 
     ldx KBTEMP
@@ -1826,13 +1856,12 @@ nmi:
 
 ; check for caps lock, if it's on, send low version
     ldx KEYSTATE + $58
-
     beq @caps
     and #$7F
     @caps:
     sta KEYRAM
     inc KBCURR
-    jmp @clear_ca1    
+    jmp @checkbuttons
     
 @shifted:
     ldx KBTEMP
@@ -1842,7 +1871,7 @@ nmi:
     ora #$80
     sta KEYRAM
     inc KBCURR
-    jmp @clear_ca1
+    jmp @checkbuttons
 
 @control:
     ldx KBTEMP
@@ -1851,7 +1880,7 @@ nmi:
     ;sta KBBUF, x
     sta KEYRAM
     inc KBCURR
-    jmp @clear_ca1
+    jmp @checkbuttons
 
 @capstoggle:
     lda KEYSTATE,X
@@ -1861,30 +1890,31 @@ nmi:
     bra @nonprint
 
 @turnon:
-    lda #$1
+    lda #$81
     sta KEYSTATE,x
 
 @nonprint:
-@clear_ca1:
-    lda #$7F
-    sta IFR
-
-@exit:
+@checkbuttons:
     ; button pressed
     clc
-    lda KEYSTATE + $6C  ; button 1
-    ora KEYSTATE + $12  ; shift key
+    lda KEYSTATE + $12  ; shift key
     ror
     ror
     sta $C061
      
-    lda KEYSTATE + $7D  ; button 2
-    ora KEYSTATE + $14  ; ctrl key
+    lda KEYSTATE + $14  ; ctrl key
     ror
     ror
     sta $C062
+    
 
-    ply
+@exit:
+
+
+    lda #$7F
+    STA IFR
+
+    ;ply
     plx
     pla
 

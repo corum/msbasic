@@ -30,5 +30,6 @@
         jmp     print_hex_word            ;$E02D
         jmp     print_crlf                ;$E030
         jmp     joytest                   ;$E033
+        jmp     keytest                   ;$E036
 
 .endif
