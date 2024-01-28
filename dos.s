@@ -211,22 +211,11 @@ parse_command:
     pla
     rts
 
-cmd_del:
-    jsr fat32_set_readbuffer
-    jsr fat32_set_target
+; ************************************************************
+; COMMANDS
 
-    jsr fat32_open_cd
 
-    ldx dos_param_0
-    jsr dos_setfileparam
-
-    jsr fat32_finddirent
-    bcs file_not_found_long
-
-    jsr fat32_deletefile
-    jsr fat32_open_cd
-    rts
-
+.segment "BANKROM"
 cmd_hexdump:
     ldx dos_param_0
     jsr dos_setfileparam
@@ -271,9 +260,87 @@ cmd_cat:
     jsr fat32_open_cd
     rts
 
+cmd_cls:
+    jmp _cls
+
+cmd_exit:
+    ;jmp WOZMON
+    jmp BREAK
+
+cmd_jump:
+    ldx dos_param_0
+    jsr dos_parse_hex_address
+    bcs invalid_address_long
+    stz KEYRAM
+    jmp (dos_addr_temp)
+
+cmd_dir:
+    jmp fat32_dir
+
+invalid_address_long:
+    jmp invalid_address
+
 file_not_found_long:
     jmp file_not_found
 
+.segment "CODE"
+; basic only
+invalid_address_long_code:
+    jmp invalid_address
+
+cmd_bsave:
+    ldx dos_param_1              ; start address
+    jsr dos_parse_hex_address
+    bcs invalid_address_long_code
+
+    lda dos_addr_temp
+    pha
+    lda dos_addr_temp+1
+    pha
+
+    ldx dos_param_2              ; length
+    jsr dos_parse_hex_address
+    bcs invalid_address_long_code
+
+    jsr restore_bytesremaining
+    
+    ldx dos_param_0
+    jsr dos_setfileparam
+
+    jsr fat32_allocatefile
+
+    ;jsr dos_setfileparam
+
+    lda #<dos_file_param
+    sta fat32_filenamepointer
+    lda #>dos_file_param
+    sta fat32_filenamepointer+1
+
+    jsr fat32_open_cd
+
+    jsr fat32_writedirent
+    bcs @error
+
+    jsr restore_bytesremaining
+
+    pla 
+    sta fat32_address+1
+    pla
+    sta fat32_address
+    
+    jsr fat32_file_write
+    bcs @error
+
+    jsr fat32_open_cd
+    rts
+
+@error:
+    jmp display_error
+
+@success:
+    jmp display_ok
+
+.segment "OS"
 cmd_chdir:
     jsr fat32_open_cd
 
@@ -301,25 +368,27 @@ display_ok:
     .byte "OK", $8D, 0
     rts
 
-; ************************************************************
-; COMMANDS
+cmd_del:
+    jsr fat32_set_readbuffer
+    jsr fat32_set_target
 
-cmd_cls:
-    jmp _cls
+    jsr fat32_open_cd
 
-cmd_dir:
-    jmp fat32_dir
-
-cmd_exit:
-    ;jmp WOZMON
-    jmp BREAK
-
-cmd_jump:
     ldx dos_param_0
-    jsr dos_parse_hex_address
-    bcs invalid_address
-    stz KEYRAM
-    jmp (dos_addr_temp)
+    jsr dos_setfileparam
+
+    jsr fat32_finddirent
+    bcs file_not_found
+
+    jsr fat32_deletefile
+    jsr fat32_open_cd
+    rts
+
+file_not_found:
+    jsr fat32_open_cd
+    jsr display_message
+    .byte "NOT FOUND", $8D, 0
+    rts
 
 load_proc_3:
     ldx dos_param_2
@@ -362,70 +431,12 @@ load_proc:
     stz KEYRAM
     rts
 
-file_not_found:
-    jsr fat32_open_cd
-    jsr display_message
-    .byte "NOT FOUND", $8D, 0
-    rts
-
 invalid_address:
     jsr display_message
     .byte "BAD ADDRESS", $8D, 0     
     rts
 
-cmd_bsave:
-
-    ldx dos_param_1              ; start address
-    jsr dos_parse_hex_address
-    bcs invalid_address
-
-    lda dos_addr_temp
-    pha
-    lda dos_addr_temp+1
-    pha
-
-    ldx dos_param_2              ; length
-    jsr dos_parse_hex_address
-    bcs invalid_address
-
-    jsr restore_bytesremaining
-    
-    ldx dos_param_0
-    jsr dos_setfileparam
-
-    jsr fat32_allocatefile
-
-    ;jsr dos_setfileparam
-
-    lda #<dos_file_param
-    sta fat32_filenamepointer
-    lda #>dos_file_param
-    sta fat32_filenamepointer+1
-
-    jsr fat32_open_cd
-
-    jsr fat32_writedirent
-    bcs @error
-
-    jsr restore_bytesremaining
-
-    pla 
-    sta fat32_address+1
-    pla
-    sta fat32_address
-    
-    jsr fat32_file_write
-    bcs @error
-
-    jsr fat32_open_cd
-    rts
     ;bra @success
-
-@error:
-    jmp display_error
-
-@success:
-    jmp display_ok
 
 cmd_owrite:
     jsr fat32_open_cd

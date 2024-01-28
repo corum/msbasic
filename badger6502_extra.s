@@ -64,6 +64,14 @@ SD_MISO        = %00000010
 
 PORTA_OUTPUTPINS = %11100000 | SD_CS | SD_SCK | SD_MOSI
 
+;GAMEPAD pins
+GC_CLOCK       = %10000000
+GC_LATCH       = %01000000
+GC_DATA1       = %00100000
+GC_DATA2       = %00010000
+
+PORTB_OUTPUTPINS = GC_CLOCK | GC_LATCH
+
 ;CONSOLE
 CURSOR_X       = $CE00
 CURSOR_Y       = $CE01
@@ -132,6 +140,23 @@ fat32_workspace= $C800  ; $C800 - $C9FF
 KBBUF           = $0200 ; $CA00
 KEYSTATE        = $CB00
 fat32_variables = $CC00
+GAMEPAD1        = $CEE0
+GAMEPAD2        = $CEF0
+
+;GAMEPAD INDICES
+
+GAMEPAD_B       = $0
+GAMEPAD_Y       = $1
+GAMEPAD_SELECT  = $2
+GAMEPAD_START   = $3
+GAMEPAD_UP      = $4
+GAMEPAD_DOWN    = $5
+GAMEPAD_LEFT    = $6
+GAMEPAD_RIGHT   = $7
+GAMEPAD_A       = $8
+GAMEPAD_X       = $9
+GAMEPAD_L       = $A
+GAMEPAD_R       = $B
 
 ; DOS
 dos_command    = $CD00  ; command line
@@ -178,6 +203,9 @@ via_init:
 
     lda #PORTA_OUTPUTPINS   ; Set various pins on port A to output
     sta DDRA
+
+    lda #PORTB_OUTPUTPINS
+    sta DDRB
 
     lda #CFGCA
     sta PCR        ; configure CA2 for negative edge independent interrupt, for PS/2, CB2 for negative interrupt for keyboard strobe
@@ -528,7 +556,6 @@ eb_save_pico:
 
 .segment "OS"
 
-
 wdc_pause:
     phx
     ldx #$B0
@@ -597,11 +624,6 @@ read_char_async:
     jsr read_char
 @exit:
     rts
-
-;read_char_echo:
-;    jsr read_char
-;    jsr display_char
-;    rts
 
 read_char_upper_echo:
     jsr read_char_upper
@@ -825,598 +847,7 @@ _cls:
     pla
     rts
 
-;fillscreen:    
-;    pha
 
-;    lda #$00
-;    sta X1
-;    sta Y1
-
-;    lda #$28
-;    sta X2    
-    
-;    lda #$C8  ; 200
-;    sta Y2
-    
-;    jsr draw_char_rect
-
-;    pla
-;    rts
-
-;draw a rectangle
-;draw_char_rect:
-;    pha
-;    phx
-;    phy
-
-;; calculate the starting address in video memory
-;    ldy Y1
-;    lda eb_hires_lsb, y
-;    sta ORIGIN_L
-
-;    lda (HIRESPAGE),Y
-;    sta ORIGIN_H
-
-;    lda X1
-;    clc
-;    adc ORIGIN_L
-;    bcc @nocarry
-;    inc ORIGIN_H
-;@nocarry:
-;    sta ORIGIN_L
-
-;    lda X2
-;    sec
-;    sbc X1
-;    sta DRAW_WIDTH
-    
-;    lda Y2
-;    sec
-;    sbc Y1
-;    sta DRAW_HEIGHT
-
-;    lda DRAW_COLOR
-    
-;    ldx #$00
-;@dr_looprow:
-;    ldy #$00
-;@dr_loopcol:
-;    sta (ORIGIN_L),Y
-;    iny
-;	cpy DRAW_WIDTH
-;	bne @dr_loopcol
-
-    ; add 40 to ORIGIN_L
-    ; if overflow, increment origin_H
- ;   lda #$28 ; 40
- ;   clc
- ;   adc ORIGIN_L
- ;   bcc @after_carry
- ;   inc ORIGIN_H
-;@after_carry:
-;    sta ORIGIN_L
-;    lda DRAW_COLOR
-;    inx
-;	cpx DRAW_HEIGHT
-;	bne @dr_looprow
-
-;    ply
-;    plx
-;    pla
-;    rts
-
-
-
-; ==============================================
-; CONSOLE AND FONT
-; ==============================================
-
-;clear_text_region:
-;    pha
-;    phx
-;    phy
-
-;@clearinput:
-;    ; clear the last line and draw screen
-;    ldy #$0
-;    ldx #$0
-
-;@loopx:
-;    lda eb_text1_msb, x
-;    sta DEST_HIGH
-;    lda eb_text_lsb, x
-;    sta DEST_LOW
-;    lda #$00
-
-;; clear the input line
-;@loopy:
-;    sta (DEST_LOW),Y
-
-;    iny
-;    cpy #$28
-;    bne @loopy
-;    inx
-;    cpx #$18
-;    bne @loopx
-
-;    ply
-;    plx
-;    pla
-
-;    rts
-
-;console_add_char:
-;    pha
-;    phy
-;    sta CHAR_DRAW
-
-;; check for non printables
-;    cmp #$00
-;    beq @done
-;    cmp #$0D
-;    beq @docr
-;    cmp #$0A
-;    beq @dolf
-;    cmp #$1b
-;    beq @clear
-;    cmp #$8
-;    bne @storechar
-
-;@backspace:
-;;backspace handling
-;    stz CHAR_DRAW  ; draw a blank char
-;    lda CURSOR_X
-;    bne @deletechar
-;    inc CURSOR_X  ; inc here since we're already at 0 and we'll dec below
-;    bra @storechar
-
-;@deletechar:
-;    dec CURSOR_X
-;    ;jsr draw_char ; draw over the char
-    
-;@storechar:
-;    ldy CURSOR_Y
-;    lda eb_text1_msb, y
-;    sta CURSOR_ADDR_H
-;    lda eb_text_lsb, y
-;    sta CURSOR_ADDR
-
-;    ldy CURSOR_X
-;    ; write to text screen mem
-;    lda CHAR_DRAW
-;    sta (CURSOR_ADDR),Y
-
-;    ; if 0 char, skip to done
-;    bne @draw
-;    ;dec CURSOR_X
-;    ;jsr draw_char    ; disable for text mode
-;    bra @done
-
-;@dolf:
-;    lda #$00
-;    sta CHAR_DRAW
-;    inc CURSOR_Y
-;    lda CURSOR_Y
-;    cmp #$18    ; line 24?  scroll
-;    bne @done
-;    dec CURSOR_Y
-;    jsr scroll_console
-;    bra @done
-
-;@docr:
-;    stz CHAR_DRAW
-;    stz CURSOR_X
-;    bra @done
-
-;@draw:
-;    ;jsr draw_char
-
-;@advance:
-;    inc CURSOR_X
-;    lda CURSOR_X
-;    cmp #$38        ; 40 chars max
-;    bne @done
-;    stz CURSOR_X
-;    bra @done
-
-
-;@clear:
-;    jsr cls
-
-;@done:
-;    ply
-;    pla    
-;    rts
-
-
-; SCROLLING
-;scroll_console:
-;    pha
-;    phy
-;    phx
-
-    ; copy from row 2-1, 3->2, etc...
-;    ldx #$0
-;@loopx:
-;    lda eb_text1_msb, x
-;    sta DEST_HIGH
-;    lda eb_text_lsb, x
-;    sta DEST_LOW
-
-;    inx
-;    cpx #$18
-;    beq @clearinput
-    
-;    lda eb_text1_msb, x
-;    sta SOURCE_HIGH
-;    lda eb_text_lsb, x
-;    sta SOURCE_LOW
-
-;    ldy #$0
-;@loopy:
-    ; copy from source to dest
-;    lda (SOURCE_LOW),y
-;    sta (DEST_LOW),y
-
-;;    inc SOURCE_LOW
-;;    bne @skipinc1
-;;    inc SOURCE_HIGH
-;;@skipinc1:
-    
-;;    inc DEST_LOW
-;;    bne @skipinc2
-;;    inc DEST_HIGH
-;;@skipinc2:
-; 
-;    iny
-;    cpy #$28
-;    bne @loopy
-;    bra @loopx
-
-;@clearinput:
-;    ; clear the last line and draw screen
-;    ldy #$0
-;    ldx #$17
-
-;    lda eb_text1_msb, x
-;    sta DEST_HIGH
-;    lda eb_text_lsb, x
-;    sta DEST_LOW
-;    lda #$00
-
-;; clear the input line
-;@loopclear:
-;    sta (DEST_LOW),y
-
-;    ;inc DEST_LOW
-;    ;bne @skipinc3
-;    ;inc DEST_HIGH
-;;@skipinc3:
-;    iny
-;    cpy #$28
-;    bne @loopclear
-
-;@draw:
-;    ;jsr draw_screen
-
-;    plx
-;    ply
-;    pla    
-;    rts
-
-; DRAW SCREEN
-; software text rendering code
-;draw_screen:
-;    pha
-;    phy
-;    phx
-
-    ; stash the cursor
-;    lda CURSOR_X
-;    pha
-;    lda CURSOR_Y
-;    pha
-
-;    ldx #$00
-;@loopx:
-;    stx CURSOR_Y
-;    lda eb_text1_msb, x
-;    sta DEST_HIGH
-;    lda eb_text_lsb, x
-;    sta DEST_LOW
-;    ldy #$00
-
-;@loopy: 
-;    sty CURSOR_X
-;    lda (DEST_LOW),Y
-;    sta CHAR_DRAW
-;    jsr draw_char
-
-;;    inc DEST_LOW
-;;    bne @skipinc
-;;    inc DEST_HIGH
-;;@skipinc:
-;    iny
-;    cpy #$28
-;    bne @loopy
-
-;    inx
-;    cpx #$19
-;    bne @loopx
-
-;@done:
-;    ; restore the cursor
-;    pla
-;    sta CURSOR_Y
-;    pla
-;    sta CURSOR_X
-;    plx
-;    ply
-;    pla    
-
-;    rts
-
-; DRAW CHARACTER
-; software character rendering
-;draw_char:
-;    pha
-;    phx
-;    phy
-
-
-;    lda CHAR_DRAW
-;    lsr
-;    lsr
-;    lsr
-;    lsr
-;    lsr
-;    clc
-;    adc #>font8x8
-;    sta FONTPTR_H
-
-;    lda CHAR_DRAW
-;    asl
-;    asl
-;    asl
-;    clc
-;    adc #<font8x8
-;    sta FONTPTR
-
-
-;    clc
-;    lda CURSOR_Y
-;    asl
-;    asl
-;    asl
-;    tay
-
-;    ldx #$00
-;@loopy:                  ; loop through 8 lines per char
-;    lda (HIRESPAGE),y
-;    sta ORIGIN_H
-;    lda eb_hires_lsb,y
-
-;    clc
-;    adc CURSOR_X
-;    bcc @skipcarry
-;    inc ORIGIN_H
-;@skipcarry:
-;    sta ORIGIN_L
-    
-;    lda (FONTPTR)
-;    sta (ORIGIN_L)
-
-;    inc FONTPTR
-;    bne @skipcarry2
-;    inc FONTPTR_H
-;@skipcarry2:
-;    iny
-;    inx
-;    cpx #$8
-;    bne @loopy
-
-;    ply
-;    plx
-;    pla
-;    rts
-
-
-; ============================================================================================
-; graphics tests
-; ============================================================================================
-
-;linetests:
-;    jsr linetest1
-;    jsr cls
-;    jsr linetest2
-;    jsr cls
-;    jsr linetest3
-;    rts
-
-;linetest1:
-;    stz X1
-;    stz X1_H
-
-;    stz X2_H
-;    stz Y1
-
-;    ldy #$C7
-;    ldx #$01   
-;    sty Y2
-;@effectx:
-;    ;inc DRAW_COLOR
-;    stx X2
-;    jsr draw_line
-;    inx
-;    bne @effectx
-;
-;    inc X2_H
-;@effectx2:
-;    ;inc DRAW_COLOR
-;    stx X2
-;    jsr draw_line
-;    inx
-;    cpx #$3F
-;    bne @effectx2
-;@donex:
-;    dey
-;    dex
-;    stx X2
-
-;@effecty:
-;    ;inc DRAW_COLOR
-;    sty Y2
-;    jsr draw_line
-;    dey
-;    bne @effecty
-;    rts
-
-
-;linetest2:
-;    pha
-;    phx
-;    phy
-
-
-;    ; 0,0 - 255,128
-;    lda #$02
-;    sta DRAW_COLOR
-
-;    stz X1
-;    stz X1_H
-;    stz Y1        ; Origin is (0,0)
-    
-;    lda #$01
-;    sta X2_H
-
-;    lda #$3F
-;    sta X2    
-
-;    lda #$C7
-;    sta Y2        ; Destination (320x200)
-
-;    jsr draw_line
-
-    ; 0,128 - 255,0
-;    lda #$04
-;    sta DRAW_COLOR
-
-;    stz X1_H
-;    stz X1       ; (0, 200)
-;    lda #$C7
-;    sta Y1
-
-;    lda #$01
-;    sta X2_H
-;    lda #$3F
-;    sta X2        ; (320, 0)
-
-;    stz Y2
-;    jsr draw_line
-
-
-;    ; draw backwards
-
-;    ; 320,64 - 0,32 
-
-;    lda #$01
-;    sta X2_H
-
-;    lda #$3F
-;    sta X2    
-
-;    lda #$40
-;    sta Y2        ; Origin (320x64)
-
-;    ;lda #$02
-;    ;sta DRAW_COLOR
-
-;    stz X1
-;    stz X1_H
-
-;    lda #$20
-;    sta Y1        ; Dest is (0,32)
-    
-
-;    jsr draw_line
-
-;    ply
-;    plx
-;    pla
-;    rts
-
-;linetest3:
-;    pha
-;    phx
-;    phy
-
-;    ;lda #$03
-;    ;sta DRAW_COLOR
-
-;    stz X1
-;    stz X1_H
-;    stz X2
-;    stz X2_H
-;    stz Y2
-;    lda #$C7
-;    sta Y1
-
-;@loop:    
-
-;    inc DRAW_COLOR
-;    jsr draw_line
-
-;@xlow:    
-;    clc
-;    lda X2
-;    adc #$08
-;    sta X2
-;    bcs @xhigh
-    
-;    cmp #$3F
-;    beq @xcheck
-;    bra @y
-
-;@xhigh:
-;    inc X2_H
-
-;@y:
-;    sec
-;    lda Y1
-;    sbc #$06
-;    bcc @exit
-;    sta Y1    
-;    bra @loop
-
-;@xcheck:
-;    lda X2_H
-;    lsr
-;    bcc @loop
-
-;@exit:
-
-;    ply
-;    plx
-;    pla
-;    rts
-
-;set_hires_page1:
-;    pha
-;    lda #<eb_hires1_msb
-;    sta HIRESPAGE
-;    lda #>eb_hires1_msb
-;    sta HIRESPAGE_H
-;    pla
-;    rts
-
-;set_hires_page2:
-;    pha
-;    lda #<eb_hires2_msb
-;    sta HIRESPAGE
-;    lda #>eb_hires2_msb
-;    sta HIRESPAGE_H
-;    pla
-;    rts
 
 .segment "BANKROM"
 
@@ -1432,6 +863,14 @@ keytest:
     jmp keytest
 
 joytest:
+    jsr _cls
+@loop:
+    ; move cursor to top right of screen
+    lda     WNDTOP
+    sta     CV
+    ldy     #$00
+    sty     CH
+
     jsr display_message
     .byte "X=",0
 
@@ -1453,13 +892,54 @@ joytest:
     jsr print_hex
     
     jsr print_space
-
     lda $C062
+    jsr print_hex
+
+    jsr print_space
+    lda $C063
     jsr print_hex
 
     jsr print_crlf
 
-    jmp joytest
+    jsr display_message
+    .byte "GC1: ",0
+
+    ldx #$0
+@dump_gamepad_1:
+    lda GAMEPAD1,x
+    bne @actuated1
+    lda #'0'
+    bra @notactuated1
+@actuated1:
+    lda #'1'
+@notactuated1:
+    jsr print_char
+    inx
+    cpx #$10
+    bne @dump_gamepad_1  
+
+    jsr print_crlf
+
+    jsr display_message
+    .byte "GC2: ",0
+
+    ldx #$0
+@dump_gamepad_2:
+    lda GAMEPAD2,x
+    bne @actuated2
+    lda #'0'
+    bra @notactuated2
+@actuated2:
+    lda #'1'
+@notactuated2:
+    jsr print_char
+    inx
+    cpx #$10
+    bne @dump_gamepad_2
+
+    jsr print_crlf
+
+    jmp @loop
 
 
 ; ============================================================================================
@@ -1634,21 +1114,17 @@ nmi:
 
     lda T2L  ; clear the interrupt
 
-    lda $C064
-    bpl @yaxis
-
+    ; gamepad 1
     clc
     lda KEYSTATE + $74 ; right
     ora KEYSTATE + $8D ; right/up
     ora KEYSTATE + $7A ; right/down
+    ora GAMEPAD1 + GAMEPAD_RIGHT
     ror
     ror
     ora #$7F
     sta $C064
 
-@yaxis:
-    lda $C065
-    bpl @done
 
     ; same for up/down
     clc
@@ -1656,12 +1132,31 @@ nmi:
     ora KEYSTATE + $72 ; down arrow
     ora KEYSTATE + $69 ; down/left
     ora KEYSTATE + $7A ; down/right
+    ora GAMEPAD1 + GAMEPAD_DOWN
     ror
     ror
     ora #$7F
     sta $C065
 
-@done:
+
+    ; gamepad 2
+    clc
+    lda GAMEPAD2 + GAMEPAD_RIGHT
+    ror
+    ror
+    ora #$7F
+    sta $C066
+
+
+    ; same for up/down
+    clc
+    lda GAMEPAD2 + GAMEPAD_DOWN
+    ror
+    ror
+    ora #$7F
+    sta $C067
+
+
     jmp @exit
 
 @T1:
@@ -1680,10 +1175,79 @@ nmi:
     lda #$FF
     sta $C064
     sta $C065
+    sta $C066
+    sta $C067
 
-    lda #$D8
+    ; read inputs from gamepads
+    ; first, latch the input
+    lda #$00
+    sta PORTB
+    lda #GC_LATCH
+    sta PORTB
+
+    phy
+    ldy #$1
+    ldx #$00
+@read_controllers:    
+    lda #$00          ; first time through, this drops the latch pulse
+    sta PORTB
+    sta GAMEPAD1,x
+    sta GAMEPAD2,x
+
+    lda PORTB
+    eor #$FF
+    and #GC_DATA1
+    beq @check2
+    tya
+    sta GAMEPAD1,x
+
+@check2:
+    lda PORTB
+    eor #$FF
+    and #GC_DATA2
+    beq @next_clock
+    tya
+    sta GAMEPAD2,x
+
+@next_clock:
+    lda #GC_CLOCK  ; clock rise
+    sta PORTB
+    inx
+    cpx #$10
+    bne @read_controllers
+    
+    ; we're done, bring the clock back down
+    lda #$00          ; first time through, this drops the latch pulse
+    sta PORTB         
+    ply
+
+    ;   set the buttons
+    ; button pressed
+    lda KEYSTATE + $12  ; shift key
+    ora GAMEPAD1 + GAMEPAD_Y
+    ora GAMEPAD1 + GAMEPAD_B
+    ror
+    ror
+    sta $C061
+     
+    lda KEYSTATE + $14  ; ctrl key
+    ora GAMEPAD1 + GAMEPAD_X
+    ora GAMEPAD1 + GAMEPAD_A
+    ora GAMEPAD2 + GAMEPAD_Y
+    ora GAMEPAD2 + GAMEPAD_B
+    ror
+    ror
+    sta $C062
+
+    lda GAMEPAD2 + GAMEPAD_X
+    ora GAMEPAD2 + GAMEPAD_A
+    ror
+    ror
+    sta $C063
+
+    lda #$00
     sta T2L
-    lda #$5
+    lda #$6
     sta T2H  ; set T2 for half way
 
     lda #$90
@@ -1692,9 +1256,21 @@ nmi:
     sta T1CH  ; Set T1 for end discharge check
 
     clc
+    lda KEYSTATE + $6B ; left
+    ora KEYSTATE + $6C ; left/up
+    ora KEYSTATE + $69 ; left/down
+    ora GAMEPAD1 + GAMEPAD_LEFT
+    eor #$01
+    ror
+    ror
+    ora #$7F
+    sta $C064
+
+    clc
     lda KEYSTATE + $75 ; up
     ora KEYSTATE + $6C ; up/left
     ora KEYSTATE + $7D ; up/right
+    ora GAMEPAD1 + GAMEPAD_UP
     eor #$01
     ror
     ror
@@ -1702,14 +1278,21 @@ nmi:
     sta $C065
 
     clc
-    lda KEYSTATE + $6B ; left
-    ora KEYSTATE + $6C ; left/up
-    ora KEYSTATE + $69 ; left/down
+    lda GAMEPAD2 + GAMEPAD_LEFT
     eor #$01
     ror
     ror
     ora #$7F
-    sta $C064
+    sta $C066
+
+    clc
+    lda GAMEPAD2 + GAMEPAD_UP
+    eor #$01
+    ror
+    ror
+    ora #$7F
+    sta $C067
+
 
     lda PORTB  ; clear the interrupt
     jmp @exit
@@ -1895,22 +1478,9 @@ nmi:
 
 @nonprint:
 @checkbuttons:
-    ; button pressed
-    clc
-    lda KEYSTATE + $12  ; shift key
-    ror
-    ror
-    sta $C061
-     
-    lda KEYSTATE + $14  ; ctrl key
-    ror
-    ror
-    sta $C062
     
 
 @exit:
-
-
     lda #$7F
     STA IFR
 
@@ -2245,255 +1815,6 @@ ps2_ascii_control:
   .byte $00, $00, $00, $00, $00, $00, $08, $00, $00, $00, $00, $00, $00, $00, $00, $00; 6
   .byte $00, $00, $00, $00, $00, $00, $1B, $00, $00, $00, $00, $00, $00, $00, $00, $00; 7
 
-; ebadger6502 high res lookup tables
-;eb_hires1_msb:
-;        .byte $20,$20,$20,$20,$20,$20,$20,$21
-;        .byte $21,$21,$21,$21,$21,$22,$22,$22
-;        .byte $22,$22,$22,$22,$23,$23,$23,$23
-;        .byte $23,$23,$24,$24,$24,$24,$24,$24
-;        .byte $25,$25,$25,$25,$25,$25,$25,$26
-;        .byte $26,$26,$26,$26,$26,$27,$27,$27
-;        .byte $27,$27,$27,$27,$28,$28,$28,$28
-;        .byte $28,$28,$29,$29,$29,$29,$29,$29
-;        .byte $2A,$2A,$2A,$2A,$2A,$2A,$2A,$2B
-;        .byte $2B,$2B,$2B,$2B,$2B,$2C,$2C,$2C
-;        .byte $2C,$2C,$2C,$2C,$2D,$2D,$2D,$2D
-;        .byte $2D,$2D,$2E,$2E,$2E,$2E,$2E,$2E
-;        .byte $2F,$2F,$2F,$2F,$2F,$2F,$2F,$30
-;        .byte $30,$30,$30,$30,$30,$31,$31,$31
-;        .byte $31,$31,$31,$31,$32,$32,$32,$32
-;        .byte $32,$32,$33,$33,$33,$33,$33,$33
-;        .byte $34,$34,$34,$34,$34,$34,$34,$35
-;        .byte $35,$35,$35,$35,$35,$36,$36,$36
-;        .byte $36,$36,$36,$36,$37,$37,$37,$37
-;        .byte $37,$37,$38,$38,$38,$38,$38,$38
-;        .byte $39,$39,$39,$39,$39,$39,$39,$3A
-;        .byte $3A,$3A,$3A,$3A,$3A,$3B,$3B,$3B
-;        .byte $3B,$3B,$3B,$3B,$3C,$3C,$3C,$3C
-;        .byte $3C,$3C,$3D,$3D,$3D,$3D,$3D,$3D
-;        .byte $3E,$3E,$3E,$3E,$3E,$3E,$3E,$3F
-;eb_hires_lsb:
-;        .byte $00,$28,$50,$78,$A0,$C8,$F0,$18
-;        .byte $40,$68,$90,$B8,$E0,$08,$30,$58
-;        .byte $80,$A8,$D0,$F8,$20,$48,$70,$98
-;        .byte $C0,$E8,$10,$38,$60,$88,$B0,$D8
-;        .byte $00,$28,$50,$78,$A0,$C8,$F0,$18
-;        .byte $40,$68,$90,$B8,$E0,$08,$30,$58
-;        .byte $80,$A8,$D0,$F8,$20,$48,$70,$98
-;        .byte $C0,$E8,$10,$38,$60,$88,$B0,$D8
-;        .byte $00,$28,$50,$78,$A0,$C8,$F0,$18
-;        .byte $40,$68,$90,$B8,$E0,$08,$30,$58
-;        .byte $80,$A8,$D0,$F8,$20,$48,$70,$98
-;        .byte $C0,$E8,$10,$38,$60,$88,$B0,$D8
-;        .byte $00,$28,$50,$78,$A0,$C8,$F0,$18
-;        .byte $40,$68,$90,$B8,$E0,$08,$30,$58
-;        .byte $80,$A8,$D0,$F8,$20,$48,$70,$98
-;        .byte $C0,$E8,$10,$38,$60,$88,$B0,$D8
-;        .byte $00,$28,$50,$78,$A0,$C8,$F0,$18
-;        .byte $40,$68,$90,$B8,$E0,$08,$30,$58
-;        .byte $80,$A8,$D0,$F8,$20,$48,$70,$98
-;        .byte $C0,$E8,$10,$38,$60,$88,$B0,$D8
-;        .byte $00,$28,$50,$78,$A0,$C8,$F0,$18
-;        .byte $40,$68,$90,$B8,$E0,$08,$30,$58
-;        .byte $80,$A8,$D0,$F8,$20,$48,$70,$98
-;        .byte $C0,$E8,$10,$38,$60,$88,$B0,$D8
-;        .byte $00,$28,$50,$78,$A0,$C8,$F0,$18
-;eb_hires2_msb:
-;        .byte $40,$40,$40,$40,$40,$40,$40,$41
-;        .byte $41,$41,$41,$41,$41,$42,$42,$42
-;        .byte $42,$42,$42,$42,$43,$43,$43,$43
-;        .byte $43,$43,$44,$44,$44,$44,$44,$44
-;        .byte $45,$45,$45,$45,$45,$45,$45,$46
-;        .byte $46,$46,$46,$46,$46,$47,$47,$47
-;        .byte $47,$47,$47,$47,$48,$48,$48,$48
-;        .byte $48,$48,$49,$49,$49,$49,$49,$49
-;        .byte $4A,$4A,$4A,$4A,$4A,$4A,$4A,$4B
-;        .byte $4B,$4B,$4B,$4B,$4B,$4C,$4C,$4C
-;        .byte $4C,$4C,$4C,$4C,$4D,$4D,$4D,$4D
-;        .byte $4D,$4D,$4E,$4E,$4E,$4E,$4E,$4E
-;        .byte $4F,$4F,$4F,$4F,$4F,$4F,$4F,$50
-;        .byte $50,$50,$50,$50,$50,$51,$51,$51
-;        .byte $51,$51,$51,$51,$52,$52,$52,$52
-;        .byte $52,$52,$53,$53,$53,$53,$53,$53
-;        .byte $54,$54,$54,$54,$54,$54,$54,$55
-;        .byte $55,$55,$55,$55,$55,$56,$56,$56
-;        .byte $56,$56,$56,$56,$57,$57,$57,$57
-;        .byte $57,$57,$58,$58,$58,$58,$58,$58
-;        .byte $59,$59,$59,$59,$59,$59,$59,$5A
-;        .byte $5A,$5A,$5A,$5A,$5A,$5B,$5B,$5B
-;        .byte $5B,$5B,$5B,$5B,$5C,$5C,$5C,$5C
-;        .byte $5C,$5C,$5D,$5D,$5D,$5D,$5D,$5D
-;        .byte $5E,$5E,$5E,$5E,$5E,$5E,$5E,$5F
-
-;eb_text1_msb:
-;        .byte $04,$04,$05,$05
-;        .byte $06,$06,$07,$07
-;        .byte $04,$04,$05,$05
-;        .byte $06,$06,$07,$07
-;        .byte $04,$04,$05,$05
-;        .byte $06,$06,$07,$07
-
-;eb_text2_msb:
-;        .byte $08,$08,$09,$09
-;        .byte $0A,$0A,$0B,$0B
-;        .byte $08,$08,$09,$09
-;        .byte $0A,$0A,$0B,$0B
-;        .byte $08,$08,$09,$09
-;        .byte $0A,$0A,$0B,$0B
-
-;eb_text_lsb:
-;        .byte $00,$80,$00,$80
-;        .byte $00,$80,$00,$80
-;        .byte $28,$A8,$28,$A8
-;        .byte $28,$A8,$28,$A8
-;        .byte $50,$D0,$50,$D0
-;        .byte $50,$D0,$50,$D0
-
-; ****************************************************************************************************************
-;  The WOZ Monitor for the Apple 1
-;  Written by Steve Wozniak in 1976
-
-
-; Page 0 Variables
-
-;XAML            = $24           ;  Last "opened" location Low
-;XAMH            = $25           ;  Last "opened" location High
-;STL             = $26           ;  Store address Low
-;STH             = $27           ;  Store address High
-;L               = $28           ;  Hex value parsing Low
-;H               = $29           ;  Hex value parsing High
-;YSAV            = $2A           ;  Used to see if hex value is given
-;MODE            = $2B           ;  $00=XAM, $7F=STOR, $AE=BLOCK XAM
-
-
-; Other Variables
-
-; IN              = $CF00    ;  Input buffer to +$7F
-
-.segment "WOZ"
-
-;WOZMON:         CLD             ; Clear decimal arithmetic mode.
-;                CLI
-;NOTCR:          CMP #$08 + $80  ; "\B"?
-;                BEQ BACKSPACE   ; Yes.
-;                CMP #$9B        ; ESC?
-;                BEQ ESCAPE      ; Yes.
-;                INY             ; Advance text index.
-;                BPL NEXTCHAR    ; Auto ESC if > 127.
-;ESCAPE:         LDA #'\'        ; "\".
-;                JSR ECHO        ; Output it.
-;GETLINE:        LDA #$0D        ; CR.
-;                JSR ECHO        ; Output it.
-;                LDA #$0A        ; LF.
-;                JSR ECHO        ; Output it.
-;                LDY #$01        ; Initialize text index.
-;BACKSPACE:      DEY             ; Back up text index.
-;                BMI GETLINE     ; Beyond start of line, reinitialize.
-;NEXTCHAR:       jsr read_char_upper   ; Key ready?
-;                STA IN,Y        ; Add to text buffer.
-;                JSR ECHO        ; Display character.
-;                CMP #$8D        ; CR?
-;                BNE NOTCR       ; No.
-;                LDY #$FF        ; Reset text index.
-;                LDA #$00        ; For XAM mode.
-;                TAX             ; 0->X.
-;SETSTOR:        ASL             ; Leaves $7B if setting STOR mode.
-;SETMODE:        STA MODE        ; $00=XAM $7B=STOR $AE=BLOK XAM
-;BLSKIP:         INY             ; Advance text index.
-;NEXTITEM:       LDA IN,Y        ; Get character.
-;                CMP #$8D        ; CR?
-;                BEQ GETLINE     ; Yes, done this line.
-;                CMP #'.' + $80  ; "."?
-;                BCC BLSKIP      ; Skip delimiter.
-;                BEQ SETMODE     ; Yes. Set STOR mode.
-;                CMP #':' + $80  ; ":"?
-;                BEQ SETSTOR     ; Yes. Set STOR mode.
-;                CMP #'R' + $80  ; "R"?
-;                BEQ WOZRUN      ; Yes. Run user program.
-;                STX L           ; $00-> L.
-;                STX H           ; and H.
-;                STY YSAV        ; Save Y for comparison.
-;NEXTHEX:        LDA IN,Y        ; Get character for hex test.
-;                EOR #$B0        ; Map digits to $0-9.
-;                CMP #$0A        ; Digit?
-;                BCC DIG         ; Yes.
-;                ADC #$88        ; Map letter "A"-"F" to $FA-FF.
-;                CMP #$FA        ; Hex letter?
-;                BCC NOTHEX      ; No, character not hex.
-;DIG:            ASL
-;                ASL             ; Hex digit to MSD of A.
-;                ASL
-;                ASL
-;                LDX #$04        ; Shift count.
-;HEXSHIFT:       ASL             ; Hex digit left, MSB to carry.
-;                ROL L           ; Rotate into LSD.
-;                ROL H           ;  Rotate into MSD’s.
-;                DEX             ; Done 4 shifts?
-;                BNE HEXSHIFT    ; No, loop.
-;                INY             ; Advance text index.
-;                BNE NEXTHEX     ; Always taken. Check next char for hex.
-;NOTHEX:         CPY YSAV        ; Check if L, H empty (no hex digits).
-;                BEQ ESCAPE      ; Yes, generate ESC sequence.
-;                BIT MODE        ; Test MODE byte.
-;                BVC NOTSTOR     ;  B6=0 STOR 1 for XAM & BLOCK XAM
-;                LDA L           ; LSD’s of hex data.
-;                STA (STL,X)     ; Store at current ‘store index’.
-;                INC STL         ; Increment store index.
-;                BNE NEXTITEM    ; Get next item. (no carry).
-;                INC STH         ; Add carry to ‘store index’ high order.
-;TONEXTITEM:     JMP NEXTITEM    ; Get next command item.
-;WOZRUN:         JMP (XAML)      ; Run at current XAM index.
-;NOTSTOR:        BMI XAMNEXT     ; B7=0 for XAM, 1 for BLOCK XAM.
-;                LDX #$02        ; Byte count.
-;SETADR:         LDA L-1,X       ; Copy hex data to
-;                STA STL-1,X     ; ‘store index’.
-;                STA XAML-1,X    ; And to ‘XAM index’.
-;                DEX             ; Next of 2 bytes.
-;                BNE SETADR      ; Loop unless X=0.
-;NXTPRNT:        BNE PRDATA      ; NE means no address to print.
-;                LDA #$8D        ; CR.
-;                JSR ECHO        ; Output it.
-;                LDA #$8A        ; LF
-;                JSR ECHO        ; Output it.
-;                LDA XAMH        ; ‘Examine index’ high-order byte.
-;                JSR PRBYTE      ; Output it in hex format.
-;                LDA XAML        ; Low-order ‘examine index’ byte.
-;                JSR PRBYTE      ; Output it in hex format.
-;                LDA #':' + $80  ; ":".
-;                JSR ECHO        ; Output it.
-;PRDATA:         LDA #$A0        ; Blank.
-;                JSR ECHO        ; Output it.
-;                LDA (XAML,X)    ; Get data byte at ‘examine index’.
-;                JSR PRBYTE      ; Output it in hex format.
-;XAMNEXT:        STX MODE        ; 0->MODE (XAM mode).
-;                LDA XAML
-;                CMP L           ; Compare ‘examine index’ to hex data.
-;                LDA XAMH
-;                SBC H
-;                BCS TONEXTITEM  ; Not less, so no more data to output.
-;                INC XAML
-;                BNE MOD8CHK     ; Increment ‘examine index’.
-;                INC XAMH
-;MOD8CHK:        LDA XAML        ; Check low-order ‘examine index’ byte
-;                AND #$07        ; For MOD 8=0
-;                BPL NXTPRNT     ; Always taken.
-;PRBYTE:         PHA             ; Save A for LSD.
-;                LSR
-;                LSR
-;                LSR             ; MSD to LSD position.
-;                LSR
-;                JSR PRHEX       ; Output hex digit.
-;                PLA             ; Restore A.
-;PRHEX:          AND #$0F        ; Mask LSD for hex print.
-;                ORA #'0' + $80  ; Add "0".
-;                CMP #$BA        ; Digit?
-;                BCC ECHO        ; Yes, output it.
-;                ADC #$06        ; Add offset for letter.
-;ECHO:           pha
-;                and #$7F
-;                jsr display_char
-;                pla
-;                RTS             ; Return.
 
 
 .segment "BOOTVECTORS"
