@@ -609,6 +609,15 @@ dos_parse_hex_address:
     ; x points to the first byte of the address parameter
     ; require A$ to proceed the address
 @parseheader:
+    inx
+    inx
+    lda dos_command,X
+    cmp #'$'
+    beq @parse
+    dex
+    dex
+
+@parse:
     ; high nyble of high byte
     inx
     lda dos_command,x
