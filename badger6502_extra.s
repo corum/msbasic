@@ -69,7 +69,8 @@ GC_LATCH       = %01000000
 GC_DATA1       = %00100000
 GC_DATA2       = %00010000
 
-PS2_MOUSE_DATA = %10000000
+PS2_MOUSE_CLK  = %00000010
+PS2_MOUSE_DATA = %00000001
 
 PORTB_OUTPUTPINS = GC_CLOCK | GC_LATCH
 
@@ -128,6 +129,7 @@ KBDBG2         = $CE1E
 KEYTEMP        = $CE1F
 KEYLAST        = $CE20
 MUTE_OUTPUT    = $CE21
+MOUSE_SEND     = $CE22
 
 ; keyboard processing states
 PS2_START      = $00
@@ -198,17 +200,89 @@ SS_RW_BANK1    = $C08B ; Read/write RAM bank 1 also $C08F
 
 ;CSWL           = $36
 
-via_init:
-    lda #%11111111          ; Set all pins on port B to output
-    sta DDRB
+mouse_ready:
+    lda #%01111111 
+    sta IER        ; disable VIA interrupts for now
 
+    lda #PS2_MOUSE_CLK
+    sta DDRB       ; make clock output pin
+
+    lda #$00
+    sta PORTB      ; pull clock low
+    
+    ; wait for 100 microseconds+
+    ldx #$30
+@pause:
+    dex
+    bne @pause
+
+
+
+    lda #PS2_MOUSE_DATA | PS2_MOUSE_CLK
+    sta DDRB       ; take the data as output
+
+    lda #$00
+    sta PORTB      ; pull data low
+
+    lda #PS2_MOUSE_DATA  
+    sta DDRB       ; release the clock line
+
+    ldy #$07 ; 8 bits
+    lda MOUSE_SEND ; ready device code
+
+    clc
+    jsr mouse_send_bit   ; start bit is a zero
+
+    ldx #$1 ; odd parity
+@sendbyte:
+    ror                  ; bit 0 -> carry
+    bcc @send
+    inx                  ; increment x for parity, if carry is set, it's a 1
+@send:
+    jsr mouse_send_bit
+    dey
+    bpl @sendbyte
+
+    txa ; parity stored in X
+    ror ; move bit 0->Carry
+    jsr mouse_send_bit
+
+    sec ; set carry for stop bit
+    jsr mouse_send_bit
+
+    jsr via_init  ; reset via configuraiton
+
+    rts
+
+mouse_send_bit:
+    pha
+
+;set data
+    rol                       ; PS2_MOUSE_DATA
+    sta PORTB
+
+@waithigh:
+    lda PORTB
+    and #PS2_MOUSE_CLK
+    beq @waithigh
+
+; wait for clock to drops
+@waitlow:
+    lda PORTB
+    and #PS2_MOUSE_CLK
+    bne @waitlow
+
+    pla
+    rts
+
+via_init:
     lda #PORTA_OUTPUTPINS   ; Set various pins on port A to output
     sta DDRA
 
     lda #PORTB_OUTPUTPINS
     sta DDRB
 
-    lda %00100010  ; configure CA1 and CA2 for negative active edge for PS/2 clocks
+    lda #%00100010  ; configure CA1 and CA2 for negative active edge for PS/2 clocks
     sta PCR        ; configure CA2 for negative edge independent interrupt, for PS/2, CB2 for negative interrupt for keyboard strobe
 
     lda #$0
