@@ -6,11 +6,11 @@
 .include "badger6502_iscntc.s"
 .endif
 
+
+.ifndef BADGER6502
 .ifndef CONFIG_CBM_ALL
 .include "cbm_iscntc.s"
 .endif
-
-.ifndef BADGER6502
 .ifdef KBD
 .include "kbd_iscntc.s"
 .endif

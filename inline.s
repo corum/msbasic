@@ -61,11 +61,11 @@ INLINAIM:
         cmp     #$0D
         beq     L2453
 .ifdef BADGER6502
-        cmp     #$08
-        bne     @EB_SKIP_BACKSPACE
-        stz     INPUTBUFFER, X
-        dex
-        bra     @EB_SKIP_APPEND 
+ ;       cmp     #$08
+ ;       bne     @EB_SKIP_BACKSPACE
+ ;       stz     INPUTBUFFER, X
+ ;       dex
+ ;       bra     @EB_SKIP_APPEND 
 .endif
 
     .ifndef CONFIG_NO_LINE_EDITING
@@ -155,7 +155,7 @@ GETLN:
     .endif
   .endif
   .ifdef APPLE
-RDKEY:
+_RDKEY:
         jsr     LFD0C
         and     #$7F
   .endif

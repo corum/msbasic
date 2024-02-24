@@ -1,6 +1,6 @@
 .if .def(badger6502)
 BADGER6502 := 1
-CBM2 := 1
+APPLE := 1
 .include "defines_badger6502.s"
 .elseif .def(cbmbasic1)
 CBM1 := 1
