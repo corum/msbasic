@@ -54,7 +54,6 @@ MSG_ADDR_HIGH  = $B7
 
 ;VIA config flags 
 ICLR           = %01111111  ; clear all VIA interrupts
-CFGCA          = %00100010  ; configure CA2 for negative active edge for PS/2 clock
 
 ;SD card pins
 SD_CS          = %00010000
@@ -69,6 +68,8 @@ GC_CLOCK       = %10000000
 GC_LATCH       = %01000000
 GC_DATA1       = %00100000
 GC_DATA2       = %00010000
+
+PS2_MOUSE_DATA = %10000000
 
 PORTB_OUTPUTPINS = GC_CLOCK | GC_LATCH
 
@@ -207,14 +208,14 @@ via_init:
     lda #PORTB_OUTPUTPINS
     sta DDRB
 
-    lda #CFGCA
+    lda %00100010  ; configure CA1 and CA2 for negative active edge for PS/2 clocks
     sta PCR        ; configure CA2 for negative edge independent interrupt, for PS/2, CB2 for negative interrupt for keyboard strobe
 
     lda #$0
     sta ACR
 
-    lda #%11111001 
-    sta IER        ; enable interrupts for CA2, CB1, CB2 and Timer1, Timer2
+    lda #%11111011 
+    sta IER        ; enable interrupts for CA2, CA1, CB1, CB2 and Timer1, Timer2
 
     rts
 
