@@ -317,6 +317,11 @@ OUTDO:
 ; Commodore forgot to remove this in CBM1
         pha
 .endif
+        cmp     #CR
+        bne @next
+        jsr CR
+        bra L2A4C
+@next:
 .ifdef CBM1
         cmp     #$1D ; CRSR RIGHT
         beq     LCA6A

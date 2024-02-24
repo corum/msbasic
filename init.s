@@ -219,7 +219,9 @@ L4098:
   .ifndef AIM65
     .ifndef SYM1
         cmp     #$41
-        beq     PR_WRITTEN_BY
+        bne @after
+        jmp     PR_WRITTEN_BY
+        @after:
     .endif
   .endif
         tay

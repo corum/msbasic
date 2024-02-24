@@ -1376,8 +1376,8 @@ nmi:
     cmp #$F0           ; set the key up bit if it's a key up
     bne @notkeyup
     sta KBKEYUP
-    lda #$00
-    sta KEYRAM
+    ;lda #$00
+    ;sta KEYRAM
     jmp @checkbuttons          ; updated key up state, we're done here
  
 @notkeyup:
@@ -1391,7 +1391,7 @@ nmi:
     ; clear flags
     sta KBEXTEND
     sta KBKEYUP
-    sta KEYRAM
+    ;sta KEYRAM
 
     cpx #$58
     bne @clear
@@ -1441,7 +1441,7 @@ nmi:
 ; check for caps lock, if it's on, send low version
     ldx KEYSTATE + $58
     beq @caps
-    and #$7F
+    ;and #$7F
     @caps:
     sta KEYRAM
     inc KBCURR
@@ -1789,7 +1789,7 @@ ps2_ascii:
   .byte $00, $C3, $D8, $C4, $C5, $B4, $B3, $00, $00, $A0, $D6, $C6, $D4, $D2, $B5, $00; 2
   .byte $00, $CE, $C2, $C8, $C7, $D9, $B6, $00, $00, $00, $CD, $CA, $D5, $B7, $B8, $00; 3
   .byte $00, $AC, $CB, $C9, $CF, $B0, $B9, $00, $00, $AE, $AF, $CC, $BB, $D0, $AD, $00; 4  
-  .byte $00, $00, $22, $00, $D8, $8D, $00, $00, $00, $00, $8D, $DD, $00, $DC, $00, $00; 5
+  .byte $00, $00, $22, $00, $D8, $BD, $00, $00, $00, $00, $8D, $DD, $00, $DC, $00, $00; 5
   .byte $00, $00, $00, $00, $00, $00, $08, $00, $00, $00, $00, $88, $00, $00, $00, $00; 6
   .byte $00, $00, $8A, $00, $95, $8B, $9B, $00, $00, $00, $00, $00, $00, $00, $00, $00; 7
 
@@ -1800,7 +1800,7 @@ ps2_ascii_shifted:
   .byte $00, $C3, $D8, $C4, $C5, $A4, $A3, $00, $00, $A0, $D6, $C6, $D4, $D2, $A5, $00; 2
   .byte $00, $CE, $C2, $C8, $C7, $D9, $DE, $00, $00, $00, $CE, $CA, $D5, $A6, $AA, $00; 3
   .byte $00, $BC, $CB, $C9, $CF, $A9, $A8, $00, $00, $BE, $BF, $CC, ":", $D0, $DF, $00; 4  
-  .byte $00, $00, $22, $00, $D8, $8D, $00, $00, $00, $00, $8D, $DD, $00, "|", $00, $00; 5
+  .byte $00, $00, $22, $00, $D8, $BD, $00, $00, $00, $00, $8D, $DD, $00, "|", $00, $00; 5
   .byte $00, $00, $00, $00, $00, $00, $08, $00, $00, $00, $00, $88, $00, $00, $00, $00; 6
   .byte $00, $00, $8A, $00, $95, $8B, $9B, $00, $00, $00, $00, $00, $00, $00, $00, $00; 7
  

@@ -1,62 +1,49 @@
 ; configuration
-CONFIG_2A := 1
+CONFIG_2 := 1
 
-CONFIG_CBM_ALL := 1
+APPLE_BAD_BYTE := 1
+CONFIG_IO_MSB := 1 ; all I/O has bit #7 set
+CONFIG_PRINT_CR := 1 ; print CR when line end reached
+CONFIG_SAFE_NAMENOTFOUND := 1
+CONFIG_SCRTCH_ORDER := 3
 
-CONFIG_DATAFLG := 1
-CONFIG_EASTER_EGG := 1
-;CONFIG_FILE := 1; support PRINT#, INPUT#, GET#, CMD
-CONFIG_NO_CR := 1; terminal doesn't need explicit CRs on line ends
-CONFIG_NO_LINE_EDITING := 1; support for "@", "_", BEL etc.
-CONFIG_NO_READ_Y_IS_ZERO_HACK := 1
-CONFIG_PEEK_SAVE_LINNUM := 1
-CONFIG_SCRTCH_ORDER := 2
-;CONFIG_PRINTNULLS := 1
-;CONFIG_SMALL_ERROR := 1
+BYTES_PER_ELEMENT := 6 ; XXX override
 
 ; zero page
 ZP_START1 = $00
-ZP_START2 = $0D
-ZP_START3 = $03
-ZP_START4 = $13
+ZP_START2 = $4F
+ZP_START3 = $0D
+ZP_START4 = $55
 
-; extra/override ZP variables
-CURDVC			:= $000E
-TISTR			:= $008D
-Z96				:= $0096
-POSX			:= $00C6
-TXPSV			:= LASTOP
-USR				:= GORESTART ; XXX
+;extra ZP variables
+USR				:= $000A
 
 ; inputbuffer
-INPUTBUFFER     := $200
+INPUTBUFFER     := $0200
 
 ; constants
-SPACE_FOR_GOSUB := $3E
-STACK_TOP		:= $FA
+STACK_TOP		:= $F8
+SPACE_FOR_GOSUB := $36
+CRLF_1          := $8D
+CRLF_2          := $80
 WIDTH			:= 40
-WIDTH2			:= 30
-;NULL_MAX		:= $0A
+WIDTH2			:= 14
 
-RAMSTART2		:= $1000
-
-; magic memory locations
-ENTROPY = $7000
+; memory layout
+RAMSTART2	    := $800
 
 ; monitor functions
-MONRDKEY        := RDCHAR
-MONCOUT         := display_char
-;CHKIN           := do_nothing
-;CHKOUT          := do_nothing
-CLALL           := do_nothing
-;CHRIN           := do_nothing
-;CLRCH           := do_nothing
-CLOSE           := do_nothing
-OPEN            := do_nothing
-;SYS             := do_nothing
-VERIFY          := do_nothing
-;LE7F3           := do_nothing
-LOAD            := eb_load
-SAVE            := eb_save
-L2420           := display_char
-L2423           := display_char
+MONRDKEY        := $FD0C
+MONCOUT         := $FDED
+LF689			:= $F689
+LF800			:= $F800
+LF819			:= $F819
+LF828			:= $F828
+LF864			:= $F864
+TEX				:= $FB2F
+LFB40			:= $FB40
+LFD0C			:= $FD0C
+LFD6A			:= $FD6A
+LFECD			:= $FECD
+LFEFD			:= $FEFD
+

@@ -5,6 +5,6 @@ ISCNTC:
         beq     L0ECC
         rts
 L0ECC:
-        jsr     RDKEY
+        jsr     _RDKEY
         cmp     #$03
 ;!!! runs into "STOP"
