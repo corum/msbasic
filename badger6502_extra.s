@@ -1157,7 +1157,7 @@ nmi:
     ora #$80
     sta KEYRAM
     inc KBCURR
-    jmp @exit
+    bra @exit_long
 
 @ps2_keyboard_decode_long:
     jmp @ps2_keyboard_decode
@@ -1184,9 +1184,9 @@ nmi:
     bcs @T1_long                    ; bit 6
     
 @unknown_irq:
-    lda #$41
-    jsr tx_char_sync
-    jmp @exit
+    ;lda #$41
+    ;jsr tx_char_sync
+    bra @exit_long
 
 @T1_long:
     jmp @T1
@@ -1235,7 +1235,7 @@ nmi:
     bne @exit_long
     sta MOUSE_FLAGS
     inc MOUSE_STATE
-    jmp @exit
+    bra @exit_long
 
 @check_x:
     cpx #$01
@@ -1243,27 +1243,44 @@ nmi:
     lda MOUSE_FLAGS
     cmp #$10
     bne @addx
-    sec 
     lda MOUSE_X_POS
+    sec 
     sbc MOUSE_BYTE
-    bcc @addx         ; in overflow, just don't add
+    bcc @exit_long    ; in overflow, just don't add
     sta MOUSE_X_POS
-    
+    bra @exit_long
 @addx:
     clc
-    lda MOUSE_BYTE
-    adc MOUSE_X_POS
+    lda MOUSE_X_POS
+    adc MOUSE_BYTE
+    bcs @exit_long    ; in overflow, don't add
     sta MOUSE_X_POS
-
-    lda MOUSE_BYTE
-    ror              ; divide 9 bit mouse relative value by 2 
+    bra @exit_long
 
 @check_y:
+    lda #$00
+    sta MOUSE_STATE   ; last mouse position report
+    lda MOUSE_FLAGS
+    cmp #$20
+    bne @addy
+    lda MOUSE_Y_POS
+    sec
+    sbc MOUSE_BYTE
+    bcc @exit_long    ; in overflow, don't add
+    sta MOUSE_Y_POS
+    bra @exit_long
+
+@addy:
+    clc
+    lda MOUSE_Y_POS
+    adc MOUSE_BYTE
+    bcs @exit_long    ; in overflow, don't add
+    sta MOUSE_Y_POS
     jmp @exit
-    
+
 @shift:
-    lda #$46
-    jsr tx_char_sync
+    ;lda #$46
+    ;jsr tx_char_sync
 
     lda #$4
     sta IFR
@@ -1499,10 +1516,13 @@ nmi:
     cpx #PS2_STOP
     beq @stop
 
-    lda #$42
-    jsr tx_char_sync
+    ;lda #$42
+    ;jsr tx_char_sync
 
     ; should never get here
+    bra @exit_long_2
+
+@exit_long_2:
     jmp @exit
 
 @start:
@@ -1513,7 +1533,7 @@ nmi:
     sta KBBIT   ; reset to bit zero
     sta KBTEMP  ; clear the temp key
     ;inc KBDBG
-    jmp @exit
+    bra @exit_long_2
 
 @keys:
     clc
@@ -1525,19 +1545,19 @@ nmi:
     lda KBBIT
     cmp #$08
     beq @toparity
-    jmp @exit
+    bra @exit_long_2
 
 @toparity:
     lda #PS2_PARITY
     sta KBSTATE
-    jmp @exit
+    bra @exit_long_2
 
 @parity:
     ; should probably check the parity bit - all 1 data bits + parity bit should be odd #
     lda #PS2_STOP
     sta KBSTATE
     ;inc KBDBG
-    jmp @exit
+    bra @exit_long_2
 
 @stop:
     ; write our temp kb to kbbuf
@@ -1551,7 +1571,7 @@ nmi:
     cmp #$E0           ; set the extended bit if it's an extended character
     bne @notextended
     sta KBEXTEND
-    jmp @exit          ; updated the state as extended, we're done here
+    bra @exit_long_2   ; updated the state as extended, we're done here
 
 @notextended:
     cmp #$F0           ; set the key up bit if it's a key up
@@ -1580,7 +1600,7 @@ nmi:
 
 @clear:
     sta KEYSTATE,x
-    jmp @checkbuttons
+    bra @checkbuttons
 
 @setkeystate:          ; set the key state - this is key down path
     ldx KBTEMP
@@ -1626,7 +1646,7 @@ nmi:
     @caps:
     sta KEYRAM
     inc KBCURR
-    jmp @checkbuttons
+    bra @checkbuttons
     
 @shifted:
     ldx KBTEMP
@@ -1636,7 +1656,7 @@ nmi:
     ora #$80
     sta KEYRAM
     inc KBCURR
-    jmp @checkbuttons
+    bra @checkbuttons
 
 @control:
     ldx KBTEMP
@@ -1645,7 +1665,7 @@ nmi:
     ;sta KBBUF, x
     sta KEYRAM
     inc KBCURR
-    jmp @checkbuttons
+    bra @checkbuttons
 
 @capstoggle:
     lda KEYSTATE,X

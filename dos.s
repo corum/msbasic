@@ -113,78 +113,62 @@ parse_command:
 
 ; match with an existing command
 @process_command:
-
-@match_del:
     jsr match_command
     .byte "DEL", 0
     .word cmd_del-1
 
-@match_fload:
     jsr match_command
     .byte "FLOAD",0
     .word cmd_fload-1
     
-@match_cat:
     jsr match_command
     .byte "CAT",0
     .word cmd_cat-1
 
-@match_dc:
     jsr match_command
     .byte "DC",0
     .word cmd_dc-1
 
-@match_ds:
     jsr match_command
     .byte "DS",0
     .word cmd_ds-1
 
-@match_hexdump:
     jsr match_command
     .byte "HD",0
     .word cmd_hexdump-1
     
-@match_cd:
     jsr match_command
     .byte "CD",0
     .word cmd_chdir-1
 
-@match_cls:
     jsr match_command
     .byte "CLS",0
     .word cmd_cls-1
 
-@match_dir:
     jsr match_command
     .byte "DIR",0
     .word cmd_dir-1
 
-@match_jump:
     jsr match_command
     .byte "J",0
     .word cmd_jump-1
 
-@match_bload:
     jsr match_command
     .byte "BLOAD",0
     .word cmd_bload-1
 
-@match_brun:
     jsr match_command
     .byte "BRUN",0
     .word cmd_brun-1
 
-@match_bsave:
     jsr match_command
     .byte "BSAVE",0
     .word cmd_bsave-1
 
-@match_owrite:
     jsr match_command
     .byte "OWRITE",0
     .word cmd_owrite-1
 
-@match_quit:
     jsr match_command
     .byte "Q",0
     .word cmd_exit-1
