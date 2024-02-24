@@ -117,92 +117,77 @@ parse_command:
 @match_del:
     jsr match_command
     .byte "DEL", 0
-    bcs @match_fload
-    jmp cmd_del
+    .word cmd_del-1
 
 @match_fload:
     jsr match_command
     .byte "FLOAD",0
-    bcs @match_cat
-    jmp cmd_fload
+    .word cmd_fload-1
     
 @match_cat:
     jsr match_command
     .byte "CAT",0
-    bcs @match_dc
-    jmp cmd_cat
+    .word cmd_cat-1
 
 @match_dc:
     jsr match_command
     .byte "DC",0
-    bcs @match_ds
-    jmp cmd_dc
+    .word cmd_dc-1
 
 @match_ds:
     jsr match_command
     .byte "DS",0
-    bcs @match_hexdump
-    jmp cmd_ds
+    .word cmd_ds-1
 
 @match_hexdump:
     jsr match_command
     .byte "HD",0
-    bcs @match_cd
-    jmp cmd_hexdump
+    .word cmd_hexdump-1
     
 @match_cd:
     jsr match_command
     .byte "CD",0
-    bcs @match_cls
-    jmp cmd_chdir
+    .word cmd_chdir-1
 
 @match_cls:
     jsr match_command
     .byte "CLS",0
-    bcs @match_dir
-    jmp cmd_cls
+    .word cmd_cls-1
 
 @match_dir:
     jsr match_command
     .byte "DIR",0
-    bcs @match_jump
-    jmp cmd_dir
+    .word cmd_dir-1
 
 @match_jump:
     jsr match_command
     .byte "J",0
-    bcs @match_bload
-    jmp cmd_jump
+    .word cmd_jump-1
 
 @match_bload:
     jsr match_command
     .byte "BLOAD",0
-    bcs @match_brun
-    jmp cmd_bload
+    .word cmd_bload-1
 
 @match_brun:
     jsr match_command
     .byte "BRUN",0
-    bcs @match_bsave
-    jmp cmd_brun
+    .word cmd_brun-1
 
 @match_bsave:
     jsr match_command
     .byte "BSAVE",0
-    bcs @match_owrite
-    jmp cmd_bsave
+    .word cmd_bsave-1
 
 @match_owrite:
     jsr match_command
     .byte "OWRITE",0
-    bcs @match_quit
-    jmp cmd_owrite
+    .word cmd_owrite-1
 
 @match_quit:
     jsr match_command
     .byte "Q",0
-    bcs @unknown
-    jmp cmd_exit
+    .word cmd_exit-1
 
 @unknown:
     pha
@@ -360,7 +345,7 @@ cmd_chdir:
 
 display_error:
     jsr display_message
-    .byte "ERROR", $8D, 0
+    .byte "ERR", $8D, 0
     rts
 
 display_ok:
@@ -433,7 +418,7 @@ load_proc:
 
 invalid_address:
     jsr display_message
-    .byte "BAD ADDRESS", $8D, 0     
+    .byte "BADADDR", $8D, 0     
     rts
 
     ;bra @success
@@ -478,9 +463,7 @@ cmd_owrite:
 @bsave_instead:
     jmp cmd_bsave
 @invalid_address:
-    jsr display_message
-    .byte "BAD ADDRESS", $8D, 0     
-    rts
+    jmp invalid_address
 
 cmd_fload:
     jsr load_proc_3
@@ -518,26 +501,47 @@ match_command:
     sta	MSG_ADDR_LOW
     pla
     sta	MSG_ADDR_HIGH       ; get return address off the stack
-    bne	@increturn
+    bne	@advance
 
 @nextchar:
     lda	(MSG_ADDR_LOW),Y	; next message character    
-    beq	@pushreturnaddr		; null terminator?	yes, exit
-    bcs @increturn          ; previous char didn't match - skip checking
+    beq	@dobranch      		; null terminator?	yes, exit
     jsr	match_char
+    bcs @nomatch            ; previous char didn't match - skip checking
     inx
     
-@increturn:					; next byte
-    inc	MSG_ADDR_LOW
+@advance:
+    inc MSG_ADDR_LOW        ; skip over character
     bne	@nextchar
     inc	MSG_ADDR_HIGH	   	; carry
     bne	@nextchar
 
-@pushreturnaddr:
-    lda	MSG_ADDR_HIGH
+@nomatch:					; next byte
+    inc MSG_ADDR_LOW
+    lda (MSG_ADDR_LOW), y    
+    bne @nomatch            ; advance to the null
+
+    clc
+    lda MSG_ADDR_LOW
+    adc #$2
+    sta MSG_ADDR_LOW
+    lda MSG_ADDR_HIGH
+    adc #$0
+    sta MSG_ADDR_HIGH
+
     pha
     lda	MSG_ADDR_LOW
-    pha				; adjust return	address
+    pha			   	        ; adjust return	address
+    rts
+
+@dobranch:
+    iny
+    iny
+    lda (MSG_ADDR_LOW), y
+    pha
+    dey
+    lda (MSG_ADDR_LOW), y
+    pha
     rts
 
 ; A contains the char to match

@@ -130,6 +130,24 @@ KEYTEMP        = $CE1F
 KEYLAST        = $CE20
 MUTE_OUTPUT    = $CE21
 MOUSE_SEND     = $CE22
+MOUSE_FLAGS    = $CE23
+MOUSE_X_DELTA  = $CE24
+MOUSE_Y_DELTA  = $CE25
+MOUSE_X_POS    = $CE26
+MOUSE_Y_POS    = $CE27
+MOUSE_BYTE     = $CE28
+MOUSE_STATE    = $CE29
+JOYSTICK_MODE  = $CE2A
+
+; Mouse states
+MOUSE_STATE_A  = 0
+MOUSE_STATE_X  = 1
+MOUSE_STATE_Y  = 2
+
+; Joystick modes
+JOY_MODE_PADS  = 0
+JOY_MODE_KEYS  = 1
+JOY_MODE_MOUSE = 2
 
 ; keyboard processing states
 PS2_START      = $00
@@ -316,6 +334,8 @@ init:
     sta $C067
 
     sta MUTE_OUTPUT
+    sta JOYSTICK_MODE  ; init to gamepads
+    sta MOUSE_STATE
 
     ldx #$00           ; clear the key state and input buffers
 @clrbufx:
@@ -327,6 +347,11 @@ init:
     sta fat32_variables, x
     inx
     bne @clrbufx
+
+    ; mouse to center
+    lda #$80
+    sta MOUSE_X_POS
+    sta MOUSE_Y_POS
 
     sei
     cld
@@ -1083,6 +1108,29 @@ romdisk_load:
     pla
     rts
 
+; ps2_readbit waits on ps/2 clock
+; populates carry flag with data bit
+ps2_readbit:
+    jsr ps2_waitlow
+    lda PORTB          ; read a bit
+    ror                ; populate the carry bit
+    jsr ps2_waithigh
+    rts
+
+ps2_waitlow:
+    ; wait for mouse clock to go low
+    lda PORTB
+    and #PS2_MOUSE_CLK
+    beq ps2_waitlow
+    rts
+
+ps2_waithigh:
+    ; wait for mouse clock to go high
+    lda PORTB
+    and #PS2_MOUSE_CLK
+    bne ps2_waithigh
+    rts
+
 .segment "OS"
 ; ============================================================================================
 ; interrupts
@@ -1111,47 +1159,106 @@ nmi:
     inc KBCURR
     jmp @exit
 
-@ps2_keyboard_decode_short:
+@ps2_keyboard_decode_long:
     jmp @ps2_keyboard_decode
 
-@joystick_short:
+@joystick_long:
     jmp @joystick
 
 @check_via_interrupts:
     ; check the IFR to see if it's the VIA - aka the keyboard
     lda IFR
     ror
-    bcs @ps2_keyboard_decode_short  ; bit 0
+    bcs @ps2_keyboard_decode_long   ; bit 0
     ror
-    bcs @CA1                        ; bit 1
+    bcs @ps2_mouse_decode           ; bit 1
     ror
-    bcs @shift                      ; bit 2
+    bcs @shift_long                 ; bit 2
     ror
-    bcs @joystick_short             ; bit 3
+    bcs @joystick_long              ; bit 3
     ror
     bcs @kbstrobe                   ; bit 4
     ror
-    bcs @T2                         ; bit 5
+    bcs @T2_long                    ; bit 5
     ror
-    bcs @T1                         ; bit 6
+    bcs @T1_long                    ; bit 6
     
 @unknown_irq:
     lda #$41
     jsr tx_char_sync
     jmp @exit
 
+@T1_long:
+    jmp @T1
+
+@T2_long:
+    jmp @T2
+
+@shift_long:
+    jmp @shift
+
 @kbstrobe:
     lda $C000     ; strip off the high bit
     and #$7F
     sta $C000  
     lda PORTB
+@exit_long:
     jmp @exit
 
-@CA1:
-    lda #$47
-    jsr tx_char_sync
+@ps2_mouse_decode:
+    ; read byte
+    lda #$00
+    sta MOUSE_BYTE
 
-    lda PORTA
+    ; read the start bit
+    jsr ps2_waithigh
+
+    ldy #$7
+@readmousebits:
+    jsr ps2_readbit
+    rol MOUSE_BYTE
+    dey
+    bpl @readmousebits
+
+    ; MOUSE_BYTE contains the byte sent by mouse
+    jsr ps2_readbit  ; parity bit
+    jsr ps2_readbit  ; stop bit
+
+; apply mouse byte based on state
+    lda MOUSE_BYTE
+    ldx MOUSE_STATE
+
+@applystate:
+    cpx #$00
+    bne @check_x
+    cmp #$8        ; sanity check the 8 bit
+    bne @exit_long
+    sta MOUSE_FLAGS
+    inc MOUSE_STATE
+    jmp @exit
+
+@check_x:
+    cpx #$01
+    bne @check_y
+    lda MOUSE_FLAGS
+    cmp #$10
+    bne @addx
+    sec 
+    lda MOUSE_X_POS
+    sbc MOUSE_BYTE
+    bcc @addx         ; in overflow, just don't add
+    sta MOUSE_X_POS
+    
+@addx:
+    clc
+    lda MOUSE_BYTE
+    adc MOUSE_X_POS
+    sta MOUSE_X_POS
+
+    lda MOUSE_BYTE
+    ror              ; divide 9 bit mouse relative value by 2 
+
+@check_y:
     jmp @exit
     
 @shift:
