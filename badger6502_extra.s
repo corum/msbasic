@@ -229,46 +229,29 @@ mouse_on:
     lda #$F3
     sta MOUSE_SEND
     jsr mouse_message   ; set sampling rate
-
-    ldx #$10
-@loop2:
-    jsr wdc_pause  ; some pause
-    dex
-    bne @loop2
+    jsr ps2_read_packet
 
     lda #$0A
     sta MOUSE_SEND
     jsr mouse_message  ; set sampling rate to 10 reports per second
-
-@loop3:
-    jsr wdc_pause  ; some pause
-    dex
-    bne @loop3
+    jsr ps2_read_packet
 
     lda #$E8 ; set resolution
     sta MOUSE_SEND
     jsr mouse_message
-
-@loop4:
-    jsr wdc_pause  ; some pause
-    dex
-    bne @loop4
+    jsr ps2_read_packet
 
     lda #$00 ; set resolution to 1 count/mm
     sta MOUSE_SEND
     jsr mouse_message
-
-@loop:
-    jsr wdc_pause  ; some pause
-    dex
-    bne @loop
+    jsr ps2_read_packet
 
     lda #$F4
     sta MOUSE_SEND
     jsr mouse_message
+    jsr ps2_read_packet
 
-    ldx #$10
-
+    jsr via_init ; turn interrupts back on
 
     rts
 
@@ -325,14 +308,10 @@ mouse_message:
 
     sec ; set carry for stop bit
     jsr mouse_send_bit
-
-    jsr via_init  ; reset via configuraiton
-
     rts
 
 mouse_send_bit:
     pha
-
 ;set data
     rol                       ; PS2_MOUSE_DATA
     sta PORTB
@@ -350,6 +329,53 @@ mouse_send_bit:
 
     pla
     rts
+
+ps2_read_packet:
+    lda #$00
+    sta MOUSE_BYTE
+
+    jsr ps2_readbit ; start bit
+    
+    ldx #$8
+@loop:
+    jsr ps2_readbit ; bit
+    rol MOUSE_BYTE
+    dex
+    bne @loop
+
+    jsr ps2_readbit ; parity
+    jsr ps2_readbit ; stop bit
+
+    lda MOUSE_BYTE
+    jsr print_hex
+    jsr print_crlf
+
+    rts
+
+; ps2_readbit waits on ps/2 clock
+; populates carry flag with data bit
+ps2_readbit:
+    jsr ps2_waitlow
+    lda PORTB          ; read a bit
+    ror                ; populate the carry bit
+    jsr ps2_waithigh
+    rts
+
+ps2_waitlow:
+    ; wait for mouse clock to go low
+    lda PORTB
+    and #PS2_MOUSE_CLK
+    bne ps2_waitlow
+    rts
+
+ps2_waithigh:
+    ; wait for mouse clock to go high
+    lda PORTB
+    and #PS2_MOUSE_CLK
+    beq ps2_waithigh
+    rts
+
+; =================================================================================
 
 via_init:
     lda #PORTA_OUTPUTPINS   ; Set various pins on port A to output
@@ -1287,7 +1313,7 @@ nmi:
 @exit_long:
     bra @exit_long_5
 
-@ps2_mouse_decode:
+@ps2_mouse_decode:      ; decode 11 bits from the PS/2 mouse
     ldx MOUSE_STATE    
 
     cpx #PS2_M_START
