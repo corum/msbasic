@@ -94,7 +94,6 @@ fat32_init:
   sta fat32_errorstage
 
   ; Sector 0
-  lda #0
   sta zp_sd_currentsector
   sta zp_sd_currentsector+1
   sta zp_sd_currentsector+2
@@ -385,7 +384,7 @@ fat32_seekcluster:
   rol zp_sd_currentsector+1
   rol zp_sd_currentsector+2
   rol zp_sd_currentsector+3
-  jmp @spcshiftloop
+  bra @spcshiftloop
 @spcshiftloopdone:
 
   ; Add the data region start sector
@@ -779,7 +778,7 @@ fat32_allocatefile:
   jsr display_message
   .byte $8D,"fat32_allocatefile: 0 clusters?",$8D,0
   
-  jmp @done
+  bra @done
 
 @nofail:
   ; This will be clustersremaining now.
@@ -836,7 +835,7 @@ fat32_allocatefile:
   jsr fat32_updatefat
 
   ; End of chain - exit
-  jmp @done
+  bra @done
 
 @newcluster:
 
@@ -870,7 +869,7 @@ fat32_allocatefile:
   dex
   stx fat32_bytesremaining    ; note - actually stores clusters remaining
 
-  jmp @allocatelp
+  bra @allocatelp
 
   ; Done!
 @done:
@@ -1001,7 +1000,7 @@ fat32_findnextfreecluster:
   bra @walkfat
 
 @nextsearch:
-  jmp @searchclusters
+  bra @searchclusters
 
 @foundcluster:
   ; done.  
@@ -1544,7 +1543,7 @@ fat32_deletefile:
   
   ; And go again for another pass.
   sec
-  jmp @chainloop
+  bra @chainloop
 
 @endofchain:
   ; This is the last cluster in the chain.

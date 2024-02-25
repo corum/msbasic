@@ -292,7 +292,7 @@ sd_fail:
   .byte $8D,"SD READ FAILED", 10, 13, 0
 
 @failloop:
-  jmp @failloop
+  bra @failloop
 
 
   sd_writesector:
@@ -388,5 +388,5 @@ sd_fail_write:
   .byte $8D,"SD WRITE FAILED", $8D, 0
 
 @failloop:
-  jmp @failloop
+  bra @failloop
 

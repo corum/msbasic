@@ -82,7 +82,7 @@ read_command:
 @do_parse_command:
     jsr print_crlf
     jsr parse_command
-    jmp newprompt
+    bra newprompt
 
 parse_command:
     lda #$00
@@ -140,10 +140,6 @@ parse_command:
     jsr match_command
     .byte "CD",0
     .word cmd_chdir-1
-
-    jsr match_command
-    .byte "CLS",0
-    .word cmd_cls-1
 
     jsr match_command
     .byte "DIR",0
@@ -229,9 +225,6 @@ cmd_cat:
     jsr fat32_open_cd
     rts
 
-cmd_cls:
-    jmp _cls
-
 cmd_exit:
     ;jmp WOZMON
     jmp BREAK
@@ -288,7 +281,7 @@ cmd_bsave:
     jsr fat32_open_cd
 
     jsr fat32_writedirent
-    bcs @error
+    bcs display_error_long
 
     jsr restore_bytesremaining
 
@@ -298,15 +291,15 @@ cmd_bsave:
     sta fat32_address
     
     jsr fat32_file_write
-    bcs @error
+    bcs display_error_long
 
     jsr fat32_open_cd
     rts
 
-@error:
+display_error_long:
     jmp display_error
 
-@success:
+success_long:
     jmp display_ok
 
 .segment "OS"
@@ -319,7 +312,7 @@ cmd_chdir:
     jsr fat32_finddirent
     bcc @found
 
-    jmp display_error
+    bra display_error
 
 @found:
     jsr fat32_opendirent
@@ -356,7 +349,7 @@ cmd_del:
 file_not_found:
     jsr fat32_open_cd
     jsr display_message
-    .byte "NOT FOUND", $8D, 0
+    .byte "NOFIND", $8D, 0
     rts
 
 load_proc_3:
@@ -397,12 +390,12 @@ load_proc:
     lda dos_addr_temp+1
     sta zp_fat32_destination+1
 
-    stz KEYRAM
+    ;stz KEYRAM
     rts
 
 invalid_address:
     jsr display_message
-    .byte "BADADDR", $8D, 0     
+    .byte "BADD", $8D, 0     
     rts
 
     ;bra @success
@@ -447,7 +440,7 @@ cmd_owrite:
 @bsave_instead:
     jmp cmd_bsave
 @invalid_address:
-    jmp invalid_address
+    bra invalid_address
 
 cmd_fload:
     jsr load_proc_3
