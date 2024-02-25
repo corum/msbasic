@@ -947,8 +947,6 @@ _cls:
     pla
     rts
 
-
-
 .segment "BANKROM"
 
 ; some test routines
@@ -962,6 +960,40 @@ keytest:
     jsr print_crlf
     jmp keytest
 
+mousetest:
+    jsr _cls
+    lda     WNDTOP
+    sta     CV
+    ldy     #$00
+    sty     CH
+    
+    jsr display_message
+    .byte "X=",0
+    lda MOUSE_X_POS
+    jsr print_hex
+    jsr print_crlf
+    jsr display_message
+    .byte "Y=",0
+    lda MOUSE_Y_POS
+    jsr print_hex
+    jsr print_crlf
+
+    jsr display_message
+    .byte "B=", 0
+
+    lda MOUSE_FLAGS
+    and #$1
+    jsr print_nybble
+
+    jsr print_space
+
+    lda MOUSE_FLAGS
+    and #$2
+    jsr print_nybble
+
+    bra mousetest
+
+    
 joytest:
     jsr _cls
 @loop:
@@ -1121,14 +1153,14 @@ ps2_waitlow:
     ; wait for mouse clock to go low
     lda PORTB
     and #PS2_MOUSE_CLK
-    beq ps2_waitlow
+    bne ps2_waitlow
     rts
 
 ps2_waithigh:
     ; wait for mouse clock to go high
     lda PORTB
     and #PS2_MOUSE_CLK
-    bne ps2_waithigh
+    beq ps2_waithigh
     rts
 
 .segment "OS"
@@ -1231,7 +1263,7 @@ nmi:
 @applystate:
     cpx #$00
     bne @check_x
-    cmp #$8        ; sanity check the 8 bit
+    cmp #$8           ; sanity check bit 3, always 1 for flags
     bne @exit_long
     sta MOUSE_FLAGS
     inc MOUSE_STATE
@@ -1241,42 +1273,42 @@ nmi:
     cpx #$01
     bne @check_y
     lda MOUSE_FLAGS
-    cmp #$10
+    cmp #$10          ; x sign bit - negative if its a 1
     bne @addx
     lda MOUSE_X_POS
     sec 
     sbc MOUSE_BYTE
-    bcc @exit_long    ; in overflow, just don't add
+    bcc @exit_long    ; if < 0 , just don't add
     sta MOUSE_X_POS
     bra @exit_long
 @addx:
     clc
     lda MOUSE_X_POS
     adc MOUSE_BYTE
-    bcs @exit_long    ; in overflow, don't add
+    bcs @exit_long    ; in > 255, don't add
     sta MOUSE_X_POS
     bra @exit_long
 
 @check_y:
     lda #$00
-    sta MOUSE_STATE   ; last mouse position report
+    sta MOUSE_STATE   ; last mouse position report - reset state
     lda MOUSE_FLAGS
-    cmp #$20
+    cmp #$20          ; negative bit for y
     bne @addy
-    lda MOUSE_Y_POS
+    lda MOUSE_Y_POS 
     sec
     sbc MOUSE_BYTE
     bcc @exit_long    ; in overflow, don't add
     sta MOUSE_Y_POS
     bra @exit_long
-
+    
 @addy:
     clc
     lda MOUSE_Y_POS
     adc MOUSE_BYTE
     bcs @exit_long    ; in overflow, don't add
     sta MOUSE_Y_POS
-    jmp @exit
+    bra @exit_long_3
 
 @shift:
     ;lda #$46
@@ -1284,7 +1316,8 @@ nmi:
 
     lda #$4
     sta IFR
-    jmp @exit
+@exit_long_3:
+    jmp @exit_long
 
 ;OPNAPPLE = $C061 ;open apple (command) key data (read)
 ;CLSAPPLE = $C062 ;closed apple (option) key data (read)
@@ -1355,8 +1388,7 @@ nmi:
     ora #$7F
     sta $C067
 
-
-    jmp @exit
+    bra @exit_long_3
 
 @T1:
     lda T1CL ; clear the interrupt flag
@@ -1368,7 +1400,7 @@ nmi:
     sta $C066
     sta $C067
 
-    jmp @exit
+    bra @exit_long_3
 
 @joystick:
     lda #$FF
@@ -1494,6 +1526,8 @@ nmi:
 
 
     lda PORTB  ; clear the interrupt
+
+@exit_long_4:
     jmp @exit
 
 @ps2_keyboard_decode:
@@ -1522,9 +1556,6 @@ nmi:
     ; should never get here
     bra @exit_long_2
 
-@exit_long_2:
-    jmp @exit
-
 @start:
     ; should be zero - maybe check later
     lda #PS2_KEYS
@@ -1533,7 +1564,8 @@ nmi:
     sta KBBIT   ; reset to bit zero
     sta KBTEMP  ; clear the temp key
     ;inc KBDBG
-    bra @exit_long_2
+@exit_long_2:
+    jmp @exit
 
 @keys:
     clc
@@ -1596,7 +1628,7 @@ nmi:
 
     cpx #$58
     bne @clear
-    jmp @checkbuttons
+    bra @checkbuttons
 
 @clear:
     sta KEYSTATE,x
