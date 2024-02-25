@@ -136,13 +136,11 @@ MOUSE_Y_DELTA  = $CE25
 MOUSE_X_POS    = $CE26
 MOUSE_Y_POS    = $CE27
 MOUSE_BYTE     = $CE28
-MOUSE_STATE    = $CE29
+MOUSE_REPORT   = $CE29
 JOYSTICK_MODE  = $CE2A
+MOUSE_STATE    = $CE2B
+MOUSE_BIT      = $CE2C
 
-; Mouse states
-MOUSE_STATE_A  = 0
-MOUSE_STATE_X  = 1
-MOUSE_STATE_Y  = 2
 
 ; Joystick modes
 JOY_MODE_PADS  = 0
@@ -154,6 +152,17 @@ PS2_START      = $00
 PS2_KEYS       = $01
 PS2_PARITY     = $02
 PS2_STOP       = $03
+
+; mouse processing states
+PS2_M_START    = $00
+PS2_M_BITS     = $01
+PS2_M_PARITY   = $02
+PS2_M_STOP     = $03
+
+; Mouse states
+MOUSE_REPORT_A  = 0
+MOUSE_REPORT_X  = 1
+MOUSE_REPORT_Y  = 2
 
 ; starting of 512 byte buffer used by fat32
 fat32_workspace= $C800  ; $C800 - $C9FF
@@ -469,7 +478,6 @@ MSG_FILE_ERROR:
 
 
 .segment "CODE"
-
 ; load and save for eb6502
 eb_load:
     ; go get the filename from $200
@@ -725,11 +733,11 @@ read_char_async:
 @exit:
     rts
 
-read_char_upper_echo:
-    jsr read_char_upper
-    and #$7F
-    jsr display_char
-    rts
+;read_char_upper_echo:
+;    jsr read_char_upper
+;    and #$7F
+;    jsr display_char
+;    rts
 
 read_char:
     phx
@@ -796,6 +804,7 @@ display_apple_char:
     plx
     pla
     rts
+
 @execute_dos:
     phx
     jsr tx_char_sync
@@ -814,14 +823,12 @@ print_char:
 display_char:
     pha
     phx
-    phy
     jsr tx_char_sync
     ldx MUTE_OUTPUT
     bne @done
     ora #$80    
     jsr COUT1
 @done: 
-    ply
     plx
     pla
     rts
@@ -853,8 +860,6 @@ display_message:
 
 print_crlf:
     pha
-;    lda #10
-;    jsr print_char
     lda #$8D
     jsr print_char
     pla
@@ -924,8 +929,8 @@ print_nybble:
     jsr print_char
     rts
 
-wozlong:
-    jmp $FF00
+;wozlong:
+;    jmp $FF00
 
 ;==========================================================================
 ; drawing routines
@@ -933,9 +938,9 @@ wozlong:
 
 cls:
 _cls:
-    pha
+    ;pha
 
-    jsr HOME
+    jmp HOME
  ;   lda #$00
  ;   sta DRAW_COLOR
  ;   sta CURSOR_X
@@ -944,8 +949,8 @@ _cls:
     ;jsr fillscreen
 ;    jsr clear_text_region
 
-    pla
-    rts
+    ;pla
+    ;rts
 
 .segment "BANKROM"
 
@@ -1140,29 +1145,6 @@ romdisk_load:
     pla
     rts
 
-; ps2_readbit waits on ps/2 clock
-; populates carry flag with data bit
-ps2_readbit:
-    jsr ps2_waitlow
-    lda PORTB          ; read a bit
-    ror                ; populate the carry bit
-    jsr ps2_waithigh
-    rts
-
-ps2_waitlow:
-    ; wait for mouse clock to go low
-    lda PORTB
-    and #PS2_MOUSE_CLK
-    bne ps2_waitlow
-    rts
-
-ps2_waithigh:
-    ; wait for mouse clock to go high
-    lda PORTB
-    and #PS2_MOUSE_CLK
-    beq ps2_waithigh
-    rts
-
 .segment "OS"
 ; ============================================================================================
 ; interrupts
@@ -1238,82 +1220,110 @@ nmi:
     jmp @exit
 
 @ps2_mouse_decode:
-    ; read byte
+    ldx MOUSE_STATE    
+    cpx #PS2_M_BITS
+    beq @m_bits
+
+    cpx #PS2_M_START
+    beq @m_start 
+      
+    cpx #PS2_M_PARITY
+    beq @m_parity
+
+    cpx #PS2_M_STOP
+    beq @m_stop
+
+    ; should never get here
+    bra @exit_long_5
+
+@m_start:
+    ; should be zero - maybe check later
+    lda #PS2_M_BITS
+    sta MOUSE_STATE
     lda #$00
-    sta MOUSE_BYTE
+    sta MOUSE_BIT
+@exit_long_5:
+    jmp @exit
 
-    ; read the start bit
-    jsr ps2_waithigh
-
-    ldy #$7
-@readmousebits:
-    jsr ps2_readbit
+@m_bits:
+    lda PORTB
+    and #$1
+    ror             ; move PS2_MOUSE_DATA into carry bit
     rol MOUSE_BYTE
-    dey
-    bpl @readmousebits
+    inc MOUSE_BIT
+    lda MOUSE_BIT
+    cmp #$08
+    beq @m_toparity
+    bra @exit_long_5
 
-    ; MOUSE_BYTE contains the byte sent by mouse
-    jsr ps2_readbit  ; parity bit
-    jsr ps2_readbit  ; stop bit
+@m_toparity:
+    lda #PS2_M_PARITY
+    sta MOUSE_STATE
+    bra @exit_long_5
 
-; apply mouse byte based on state
+@m_parity:
+    ; should probably check the parity bit - all 1 data bits + parity bit should be odd #
+    lda #PS2_M_STOP
+    sta MOUSE_STATE
+    bra @exit_long_5
+
+@m_stop:
+    lda #PS2_M_START
+    sta KBSTATE
+    
+@process_mouse_report:
+    lda MOUSE_REPORT
+    cmp #MOUSE_REPORT_A
+    bne @report_x 
     lda MOUSE_BYTE
-    ldx MOUSE_STATE
-
-@applystate:
-    cpx #$00
-    bne @check_x
-    cmp #$8           ; sanity check bit 3, always 1 for flags
-    bne @exit_long
     sta MOUSE_FLAGS
-    inc MOUSE_STATE
-    bra @exit_long
+    inc MOUSE_REPORT
+    bra @exit_long_5
 
-@check_x:
-    cpx #$01
-    bne @check_y
+@report_x:       
+    cmp #MOUSE_REPORT_X
+    bne @report_y
+    inc MOUSE_REPORT
+
     lda MOUSE_FLAGS
     cmp #$10          ; x sign bit - negative if its a 1
     bne @addx
     lda MOUSE_X_POS
     sec 
     sbc MOUSE_BYTE
-    bcc @exit_long    ; if < 0 , just don't add
+    bcc @exit_long_5  ; if < 0 , just don't add
     sta MOUSE_X_POS
-    bra @exit_long
+    bra @exit_long_5
 @addx:
     clc
     lda MOUSE_X_POS
     adc MOUSE_BYTE
-    bcs @exit_long    ; in > 255, don't add
+    bcs @exit_long_5    ; in > 255, don't add
     sta MOUSE_X_POS
-    bra @exit_long
+    bra @exit_long_5
 
-@check_y:
+@report_y:
     lda #$00
-    sta MOUSE_STATE   ; last mouse position report - reset state
+    sta MOUSE_REPORT
     lda MOUSE_FLAGS
     cmp #$20          ; negative bit for y
     bne @addy
     lda MOUSE_Y_POS 
     sec
     sbc MOUSE_BYTE
-    bcc @exit_long    ; in overflow, don't add
+    bcc @exit_long_3  ; in overflow, don't add
     sta MOUSE_Y_POS
-    bra @exit_long
+    bra @exit_long_3
     
 @addy:
     clc
     lda MOUSE_Y_POS
     adc MOUSE_BYTE
-    bcs @exit_long    ; in overflow, don't add
+    bcs @exit_long_3  ; in overflow, don't add
     sta MOUSE_Y_POS
     bra @exit_long_3
 
 @shift:
-    ;lda #$46
-    ;jsr tx_char_sync
-
     lda #$4
     sta IFR
 @exit_long_3:
@@ -1524,7 +1534,6 @@ nmi:
     ora #$7F
     sta $C067
 
-
     lda PORTB  ; clear the interrupt
 
 @exit_long_4:
@@ -1609,8 +1618,6 @@ nmi:
     cmp #$F0           ; set the key up bit if it's a key up
     bne @notkeyup
     sta KBKEYUP
-    ;lda #$00
-    ;sta KEYRAM
     jmp @checkbuttons          ; updated key up state, we're done here
  
 @notkeyup:
