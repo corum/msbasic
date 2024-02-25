@@ -218,7 +218,19 @@ SS_RW_BANK1    = $C08B ; Read/write RAM bank 1 also $C08F
 
 ;CSWL           = $36
 
-mouse_ready:
+mouse_on:
+    lda #$F4
+    sta MOUSE_SEND
+    jsr mouse_message
+    rts
+
+mouse_off:
+    lda #$F5
+    sta MOUSE_SEND
+    jsr mouse_message
+    rts
+
+mouse_message:
     lda #%01111111 
     sta IER        ; disable VIA interrupts for now
 
@@ -962,6 +974,7 @@ keytest:
 
 mousetest:
     jsr _cls
+@loop:
     lda     WNDTOP
     sta     CV
     ldy     #$00
@@ -979,19 +992,20 @@ mousetest:
     jsr print_crlf
 
     jsr display_message
-    .byte "B=", 0
+    .byte "BTNS=", 0
 
     lda MOUSE_FLAGS
-    and #$1
+    and #$7
     jsr print_nybble
+    jsr print_crlf
 
-    jsr print_space
+    jsr display_message
+    .byte "STATE=",0
+    lda MOUSE_STATE
+    jsr print_hex
+    jsr print_crlf
 
-    lda MOUSE_FLAGS
-    and #$2
-    jsr print_nybble
-
-    bra mousetest
+    bra @loop
 
     
 joytest:
@@ -1145,7 +1159,7 @@ romdisk_load:
 ps2_readbit:
     jsr ps2_waitlow
     lda PORTB          ; read a bit
-    ror                ; populate the carry bit
+    ror                ; populate the carry bit with PS2_MOUSE_DATA
     jsr ps2_waithigh
     rts
 
@@ -1257,12 +1271,12 @@ nmi:
     jsr ps2_readbit  ; stop bit
 
 ; apply mouse byte based on state
-    lda MOUSE_BYTE
     ldx MOUSE_STATE
 
 @applystate:
     cpx #$00
     bne @check_x
+    lda MOUSE_BYTE
     cmp #$8           ; sanity check bit 3, always 1 for flags
     bne @exit_long
     sta MOUSE_FLAGS
@@ -1272,6 +1286,7 @@ nmi:
 @check_x:
     cpx #$01
     bne @check_y
+    inc MOUSE_STATE
     lda MOUSE_FLAGS
     cmp #$10          ; x sign bit - negative if its a 1
     bne @addx
