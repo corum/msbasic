@@ -243,8 +243,6 @@ mouse_ready:
     dex
     bne @pause
 
-
-
     lda #PS2_MOUSE_DATA | PS2_MOUSE_CLK
     sta DDRB       ; take the data as output
 
@@ -471,12 +469,12 @@ _loderunner:
 
 
 MSG_FILENOTFOUND:
-    .byte "NOTFOUND"
-    .byte CR,LF,0
+    .byte "NOFOUND"
+    .byte $8D,0
 
 MSG_FILE_ERROR:
     .byte "ERR"
-    .byte CR,LF,0
+    .byte $8D,0
 
 
 .segment "CODE"
@@ -1041,7 +1039,7 @@ joytest:
     jsr print_crlf
 
     jsr display_message
-    .byte "GC1: ",0
+    .byte "G1: ",0
 
     ldx #$0
 @dump_gamepad_1:
@@ -1060,7 +1058,7 @@ joytest:
     jsr print_crlf
 
     jsr display_message
-    .byte "GC2: ",0
+    .byte "G2: ",0
 
     ldx #$0
 @dump_gamepad_2:
