@@ -345,6 +345,8 @@ init:
     sta MUTE_OUTPUT
     sta JOYSTICK_MODE  ; init to gamepads
     sta MOUSE_STATE
+    sta MOUSE_REPORT
+    sta MOUSE_BIT
 
     ldx #$00           ; clear the key state and input buffers
 @clrbufx:
@@ -1217,7 +1219,7 @@ nmi:
     sta $C000  
     lda PORTB
 @exit_long:
-    jmp @exit
+    bra @exit_long_5
 
 @ps2_mouse_decode:
     ldx MOUSE_STATE    
@@ -1249,10 +1251,11 @@ nmi:
     lda PORTB
     and #$1
     ror             ; move PS2_MOUSE_DATA into carry bit
+
     rol MOUSE_BYTE
     inc MOUSE_BIT
     lda MOUSE_BIT
-    cmp #$08
+    cmp #$08        ; 8th bit in the byte
     beq @m_toparity
     bra @exit_long_5
 
@@ -1276,14 +1279,16 @@ nmi:
     cmp #MOUSE_REPORT_A
     bne @report_x 
     lda MOUSE_BYTE
+    cmp #$8                ; in the flag report, bit 3 is always true
+    beq @exit_long_5
     sta MOUSE_FLAGS
-    inc MOUSE_REPORT
+    inc MOUSE_REPORT       ; #MOUSE_REPORT_X
     bra @exit_long_5
 
 @report_x:       
     cmp #MOUSE_REPORT_X
     bne @report_y
-    inc MOUSE_REPORT
+    inc MOUSE_REPORT       ; #MOUSE_REPORT_Y
 
     lda MOUSE_FLAGS
     cmp #$10          ; x sign bit - negative if its a 1
@@ -1304,7 +1309,7 @@ nmi:
 
 @report_y:
     lda #$00
-    sta MOUSE_REPORT
+    sta MOUSE_REPORT  ; reset expected report
     lda MOUSE_FLAGS
     cmp #$20          ; negative bit for y
     bne @addy
@@ -1728,7 +1733,6 @@ nmi:
     ;ply
     plx
     pla
-
     rti
 
 do_nothing:
