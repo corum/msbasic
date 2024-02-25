@@ -131,15 +131,13 @@ KEYLAST        = $CE20
 MUTE_OUTPUT    = $CE21
 MOUSE_SEND     = $CE22
 MOUSE_FLAGS    = $CE23
-MOUSE_X_DELTA  = $CE24
-MOUSE_Y_DELTA  = $CE25
-MOUSE_X_POS    = $CE26
-MOUSE_Y_POS    = $CE27
-MOUSE_BYTE     = $CE28
-MOUSE_REPORT   = $CE29
-JOYSTICK_MODE  = $CE2A
-MOUSE_STATE    = $CE2B
-MOUSE_BIT      = $CE2C
+MOUSE_X_POS    = $CE24
+MOUSE_Y_POS    = $CE25
+MOUSE_BYTE     = $CE26
+MOUSE_REPORT   = $CE27
+JOYSTICK_MODE  = $CE28
+MOUSE_STATE    = $CE29
+MOUSE_BIT      = $CE2A
 
 
 ; Joystick modes
@@ -228,9 +226,50 @@ SS_RW_BANK1    = $C08B ; Read/write RAM bank 1 also $C08F
 ;CSWL           = $36
 
 mouse_on:
+    lda #$F3
+    sta MOUSE_SEND
+    jsr mouse_message   ; set sampling rate
+
+    ldx #$10
+@loop2:
+    jsr wdc_pause  ; some pause
+    dex
+    bne @loop2
+
+    lda #$0A
+    sta MOUSE_SEND
+    jsr mouse_message  ; set sampling rate to 10 reports per second
+
+@loop3:
+    jsr wdc_pause  ; some pause
+    dex
+    bne @loop3
+
+    lda #$E8 ; set resolution
+    sta MOUSE_SEND
+    jsr mouse_message
+
+@loop4:
+    jsr wdc_pause  ; some pause
+    dex
+    bne @loop4
+
+    lda #$00 ; set resolution to 1 count/mm
+    sta MOUSE_SEND
+    jsr mouse_message
+
+@loop:
+    jsr wdc_pause  ; some pause
+    dex
+    bne @loop
+
     lda #$F4
     sta MOUSE_SEND
     jsr mouse_message
+
+    ldx #$10
+
+
     rts
 
 mouse_off:
@@ -986,31 +1025,46 @@ mousetest:
     sty     CH
     
     jsr display_message
-    .byte "X=",0
+    .byte $8D,"X     =",0
     lda MOUSE_X_POS
     jsr print_hex
-    jsr print_crlf
     jsr display_message
-    .byte "Y=",0
+    .byte $8D, "Y     =",0
     lda MOUSE_Y_POS
     jsr print_hex
-    jsr print_crlf
 
     jsr display_message
-    .byte "BTNS=", 0
-
+    .byte $8D,"BUTTON=", 0
     lda MOUSE_FLAGS
     and #$7
     jsr print_nybble
-    jsr print_crlf
 
     jsr display_message
-    .byte "STATE=",0
+    .byte $8D, "FLAGS =",0
+    lda MOUSE_FLAGS
+    jsr print_hex
+
+    jsr display_message
+    .byte $8D, "STATE =",0
     lda MOUSE_STATE
     jsr print_hex
-    jsr print_crlf
 
-    bra @loop
+    jsr display_message
+    .byte $8D, "REPORT=",0
+    lda MOUSE_REPORT
+    jsr print_hex
+
+    jsr display_message
+    .byte $8D, "BYTE  =",0
+    lda MOUSE_BYTE
+    jsr print_hex
+
+    jsr display_message
+    .byte $8D, "BIT   =",0
+    lda MOUSE_BIT
+    jsr print_hex
+
+    jmp @loop
 
     
 joytest:
@@ -1235,11 +1289,12 @@ nmi:
 
 @ps2_mouse_decode:
     ldx MOUSE_STATE    
-    cpx #PS2_M_BITS
-    beq @m_bits
 
     cpx #PS2_M_START
     beq @m_start 
+
+    cpx #PS2_M_BITS
+    beq @m_bits
       
     cpx #PS2_M_PARITY
     beq @m_parity
@@ -1256,12 +1311,12 @@ nmi:
     sta MOUSE_STATE
     lda #$00
     sta MOUSE_BIT
+    sta MOUSE_BYTE
 @exit_long_5:
     jmp @exit
 
 @m_bits:
     lda PORTB
-    and #$1
     ror             ; move PS2_MOUSE_DATA into carry bit
 
     rol MOUSE_BYTE
@@ -1284,15 +1339,16 @@ nmi:
 
 @m_stop:
     lda #PS2_M_START
-    sta KBSTATE
+    sta MOUSE_STATE
     
 @process_mouse_report:
     lda MOUSE_REPORT
     cmp #MOUSE_REPORT_A
     bne @report_x 
     lda MOUSE_BYTE
-    cmp #$8                ; in the flag report, bit 3 is always true
-    beq @exit_long_5
+    and #$8                ; in the flag report, bit 3 is always 1
+    beq @exit_long_5       ; zero flag enabled means bit not set
+    lda MOUSE_BYTE
     sta MOUSE_FLAGS
     inc MOUSE_REPORT       ; #MOUSE_REPORT_X
     bra @exit_long_5
@@ -1303,8 +1359,8 @@ nmi:
     inc MOUSE_REPORT       ; #MOUSE_REPORT_Y
 
     lda MOUSE_FLAGS
-    cmp #$10          ; x sign bit - negative if its a 1
-    bne @addx
+    and #$10          ; x sign bit - negative if its a 1
+    beq @addx
     lda MOUSE_X_POS
     sec 
     sbc MOUSE_BYTE
@@ -1320,11 +1376,10 @@ nmi:
     bra @exit_long_5
 
 @report_y:
-    lda #$00
-    sta MOUSE_REPORT  ; reset expected report
+    stz MOUSE_REPORT  ; reset expected report
     lda MOUSE_FLAGS
-    cmp #$20          ; negative bit for y
-    bne @addy
+    and #$20          ; negative bit for y
+    beq @addy
     lda MOUSE_Y_POS 
     sec
     sbc MOUSE_BYTE
