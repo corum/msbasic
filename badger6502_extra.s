@@ -136,9 +136,11 @@ MOUSE_Y_POS    = $CE25
 MOUSE_BYTE     = $CE26
 MOUSE_REPORT   = $CE27
 MOUSE_STATE    = $CE28
-MOUSE_TEMP_L   = $CE29
-MOUSE_TEMP_H   = $CE2A
-JOYSTICK_MODE  = $CE2B
+MOUSE_T1_L     = $CE29
+MOUSE_T1_H     = $CE2A
+MOUSE_T2_L     = $CE2B
+MOUSE_T2_H     = $CE2C
+JOYSTICK_MODE  = $CE2D
 
 
 ; Joystick modes
@@ -1394,7 +1396,7 @@ nmi:
     lda A_STS
     and #%00001000   ; check receive bit
     bne @irq_receive
-    beq @check_via_interrupts
+    beq check_via_interrupts
 
 @irq_receive:
     ; we now have the byte, we need to add it to the keyboard buffer
@@ -1404,7 +1406,43 @@ nmi:
     ora #$80
     sta KEYRAM
     inc KBCURR
-    bra @exit_long
+
+check_via_interrupts:
+    ; check the IFR to see if it's the VIA - aka the keyboard
+    lda IFR
+    ror
+    ldx #$1
+    stx IFR
+    bcs @ps2_keyboard_decode_long   ; bit 0
+    ror
+    ldx #$2
+    stx IFR
+    bcs @ps2_mouse_decode           ; bit 1
+    ror
+    ldx #$4
+    stx IFR
+    bcs @shift_long                 ; bit 2
+    ror
+    ldx #$8
+    stx IFR
+    bcs @joystick_long              ; bit 3
+    ror
+    ldx #$10
+    stx IFR
+    bcs @kbstrobe                   ; bit 4
+    ror
+    ldx #$20
+    stx IFR
+    bcs @T2_long                    ; bit 5
+    ror
+    ldx #$40
+    stx IFR
+    bcs @T1_long                    ; bit 6
+
+    ldx #$7F
+    stx IFR
+    jmp final_exit
+
 
 @ps2_keyboard_decode_long:
     jmp @ps2_keyboard_decode
@@ -1412,28 +1450,13 @@ nmi:
 @joystick_long:
     jmp @joystick
 
-@check_via_interrupts:
-    ; check the IFR to see if it's the VIA - aka the keyboard
-    lda IFR
-    ror
-    bcs @ps2_keyboard_decode_long   ; bit 0
-    ror
-    bcs @ps2_mouse_decode           ; bit 1
-    ror
-    bcs @shift_long                 ; bit 2
-    ror
-    bcs @joystick_long              ; bit 3
-    ror
-    bcs @kbstrobe                   ; bit 4
-    ror
-    bcs @T2_long                    ; bit 5
-    ror
-    bcs @T1_long                    ; bit 6
-    
-@unknown_irq:
-    ;lda #$41
-    ;jsr tx_char_sync
-    bra @exit_long
+@kbstrobe:
+    lda $C000     ; strip off the high bit
+    and #$7F
+    sta $C000  
+    ;lda PORTB
+@exit_long:
+    bra @exit_long_3
 
 @T1_long:
     jmp @T1
@@ -1444,13 +1467,6 @@ nmi:
 @shift_long:
     jmp @shift
 
-@kbstrobe:
-    lda $C000     ; strip off the high bit
-    and #$7F
-    sta $C000  
-    lda PORTB
-@exit_long:
-    bra @exit_long_3
 
 @ps2_mouse_decode:          ; decode 11 bits from the PS/2 mouse
      ;lda PORTB ; clear the interrupt
@@ -1459,12 +1475,9 @@ nmi:
     cmp $D000
     sta $D000
     bne @exit_long_3
-
     jmp nmi_mouse_decode
 
 @shift:
-    lda #$4
-    sta IFR
 @exit_long_3:
     jmp @exit
 
@@ -1490,20 +1503,18 @@ nmi:
 ;extreme (reading of 255 via the standard firmware routine).
 
 @T2:
-    ; if neither left or right are down, we're at midpoint, discharge virtual capacitor now
-    ; cap is discharged by setting to 0
-
     lda T2L  ; clear the interrupt
 
     lda JOYSTICK_MODE
-    cmp #JOY_MODE_MOUSE
-    bne @t2_gamepads
+    beq @t2_gamepads
     
     lda #$7F
     sta $C065         ; form ouse mode, terminate Y axis here
     bra @exit_long_3
 
 @t2_gamepads:
+    ; if neither left or right are down, we're at midpoint, discharge virtual capacitor now
+    ; cap is discharged by setting to 0
     ; gamepad 1
     clc
     lda GAMEPAD1 + GAMEPAD_RIGHT
@@ -1552,13 +1563,12 @@ nmi:
     lda T1CL ; clear the interrupt flag
 
     lda JOYSTICK_MODE
-    cmp #JOY_MODE_MOUSE
-    bne @t1_gamepads
+    beq @t1_gamepads
 
     lda #$7F
     sta $C064  ; for mouse mode, terminate x axis here
-
     bra @exit_long_3
+
 @t1_gamepads:
     ; clear bit 7 on both, we're done - our virtual capacitors have discharged
     lda #$7F
@@ -1579,79 +1589,83 @@ nmi:
     sta $C066
     sta $C067
 
+    lda PORTB
     lda JOYSTICK_MODE
-    cmp #JOY_MODE_MOUSE
-    bne @joystick_gamepads_long
+    beq @joystick_gamepads_long
+
 @joystick_mouse:
     lda MOUSE_X_POS
-    bne @set_x_timer
-    stz $C064         ; trigger x-axis immediately
-    bra @joystick_mouse_y
+    ;bne @set_x_timer
+    ;stz $C064         ; trigger x-axis immediately
+    ;bra @joystick_mouse_y
 @set_x_timer:
     ; calculate time for X axis given MOUSE_X_POS
     ; value of MOUSE_X_POS * 11
     ; left shift 3 times for * 8
-    stz MOUSE_TEMP_H
+    stz MOUSE_T1_H
     lda MOUSE_X_POS
-    sta MOUSE_TEMP_L
+    sta MOUSE_T1_L
     asl
-    rol MOUSE_TEMP_H
+    rol MOUSE_T1_H
     asl
-    rol MOUSE_TEMP_H
+    rol MOUSE_T1_H
     asl
-    rol MOUSE_TEMP_H
+    rol MOUSE_T1_H
+    sta MOUSE_T1_L
 
     ldx #$3
 @x_times_3:
     clc
-    lda MOUSE_TEMP_L
+    lda MOUSE_T1_L
     adc MOUSE_X_POS
-    sta MOUSE_TEMP_L
-    lda MOUSE_TEMP_H
+    sta MOUSE_T1_L
+    lda MOUSE_T1_H
     adc #$0
-    sta MOUSE_TEMP_H
+    sta MOUSE_T1_H
     dex
     bne @x_times_3
 
-    lda MOUSE_TEMP_L
-    sta T1CL
-    lda MOUSE_TEMP_H
-    sta T1CH 
-
 @joystick_mouse_y:
     lda MOUSE_Y_POS
-    bne @set_y_timer
-    stz $C065         ; trigger y-axis immediately
-@exit_long_6:
-    jmp @exit
+    ;bne @set_y_timer
+    ;stz $C065         ; trigger y-axis immediately
+    ;bra @set_t1
 @set_y_timer:
     ; calculate time for Y axis given MOUSE_Y_POS
-    stz MOUSE_TEMP_H
+    stz MOUSE_T2_H
     lda MOUSE_Y_POS
-    sta MOUSE_TEMP_L
+    sta MOUSE_T2_L
     asl
-    rol MOUSE_TEMP_H
+    rol MOUSE_T2_H
     asl
-    rol MOUSE_TEMP_H
+    rol MOUSE_T2_H
     asl
-    rol MOUSE_TEMP_H
+    rol MOUSE_T2_H
+    sta MOUSE_T2_L
 
     ldx #$3
 @y_times_3:
     clc
-    lda MOUSE_TEMP_L
+    lda MOUSE_T2_L
     adc MOUSE_Y_POS
-    sta MOUSE_TEMP_L
-    lda MOUSE_TEMP_H
+    sta MOUSE_T2_L
+    lda MOUSE_T2_H
     adc #$0
-    sta MOUSE_TEMP_H
+    sta MOUSE_T2_H
     dex
     bne @y_times_3
 
-    lda MOUSE_TEMP_L
+    inc MOUSE_T2_H
+    lda MOUSE_T2_L
     sta T2L
-    lda MOUSE_TEMP_H
+    lda MOUSE_T2_H
     sta T2H
+
+    inc MOUSE_T1_H
+    lda MOUSE_T1_L
+    sta T1CL
+    lda MOUSE_T1_H
+    sta T1CH 
     jmp @exit
 
 @joystick_gamepads:
@@ -1769,7 +1783,7 @@ nmi:
     ora #$7F
     sta $C067
 
-    lda PORTB  ; clear the interrupt
+    ;lda PORTB  ; clear the interrupt
 
 @exit_long_4:
     jmp @exit
@@ -1966,10 +1980,10 @@ nmi:
     sta JOYSTICK_MODE
 
 @exit:
-nmi_exit:
-    lda #$7F
-    STA IFR
+    jmp check_via_interrupts
 
+nmi_exit:
+final_exit:
     ;ply
     plx
     pla
