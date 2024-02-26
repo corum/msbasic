@@ -241,7 +241,7 @@ mouse_on:
     jsr mouse_message
     jsr ps2_read_packet
 
-    lda #$00 ; set resolution to 1 count/mm
+    lda #$02 ; set resolution to 4 count/mm
     sta MOUSE_SEND
     jsr mouse_message
     jsr ps2_read_packet
@@ -308,6 +308,11 @@ mouse_message:
 
     sec ; set carry for stop bit
     jsr mouse_send_bit
+
+    ; release the clock
+    lda #$0
+    sta DDRB
+
     rts
 
 mouse_send_bit:
@@ -331,17 +336,15 @@ mouse_send_bit:
     rts
 
 ps2_read_packet:
-    lda #$00
+    lda #$80
     sta MOUSE_BYTE
 
     jsr ps2_readbit ; start bit
     
-    ldx #$8
 @loop:
     jsr ps2_readbit ; bit
-    rol MOUSE_BYTE
-    dex
-    bne @loop
+    ror MOUSE_BYTE
+    bcc @loop
 
     jsr ps2_readbit ; parity
     jsr ps2_readbit ; stop bit
@@ -1333,10 +1336,8 @@ nmi:
 
 @m_start:
     ; should be zero - maybe check later
-    lda #PS2_M_BITS
-    sta MOUSE_STATE
-    lda #$00
-    sta MOUSE_BIT
+    inc MOUSE_STATE  ; 0->1
+    lda #$80
     sta MOUSE_BYTE
 @exit_long_5:
     jmp @exit
@@ -1344,29 +1345,24 @@ nmi:
 @m_bits:
     lda PORTB
     ror             ; move PS2_MOUSE_DATA into carry bit
-
-    rol MOUSE_BYTE
-    inc MOUSE_BIT
-    lda MOUSE_BIT
-    cmp #$08        ; 8th bit in the byte
-    beq @m_toparity
+    ror MOUSE_BYTE
+    ; bit 0 of MOUSE_BYTE initialized to $80
+    ; after 8 shifts right, carry will be set
+    bcs @m_toparity
     bra @exit_long_5
 
 @m_toparity:
-    lda #PS2_M_PARITY
-    sta MOUSE_STATE
+    inc MOUSE_STATE ; 1->2
     bra @exit_long_5
 
 @m_parity:
     ; should probably check the parity bit - all 1 data bits + parity bit should be odd #
-    lda #PS2_M_STOP
-    sta MOUSE_STATE
+    inc MOUSE_STATE ; 2->3
     bra @exit_long_5
 
 @m_stop:
-    lda #PS2_M_START
-    sta MOUSE_STATE
-    
+    stz MOUSE_STATE ; 3->0
+        
 @process_mouse_report:
     lda MOUSE_REPORT
     cmp #MOUSE_REPORT_A
@@ -1384,42 +1380,69 @@ nmi:
     bne @report_y
     inc MOUSE_REPORT       ; #MOUSE_REPORT_Y
 
-    lda MOUSE_FLAGS
-    and #$10          ; x sign bit - negative if its a 1
-    beq @addx
-    lda MOUSE_X_POS
-    sec 
-    sbc MOUSE_BYTE
-    bcc @exit_long_5  ; if < 0 , just don't add
+    ; if sign bit is 1 (negative) and result of addition is > than previous value
+    ; set to 0
+    ; if sign bit is 0 (positive) and result of addition is < than previous value
+    ; set to $FF
+
+    clc 
+    lda MOUSE_X_POS     ; current mouse x pos
+    adc MOUSE_BYTE      ; add the delta
+    cmp MOUSE_X_POS     ; if carry is set, then the sum >= previous x, else sum < previous x
     sta MOUSE_X_POS
+    beq @exit_long_5
+    bcs @x_gt
+@x_lt:
+    lda MOUSE_FLAGS
+    asl
+    asl
+    asl
+    bpl @x_max         ; if new pos is < old pos but not a negative movement, cap to max   
     bra @exit_long_5
-@addx:
-    clc
-    lda MOUSE_X_POS
-    adc MOUSE_BYTE
-    bcs @exit_long_5    ; in > 255, don't add
+@x_gt:
+    lda MOUSE_FLAGS
+    asl
+    asl
+    asl
+    bmi @x_min        ; if new pos > old pos but not a positive moment, cap to min
+    bra @exit_long_5
+@x_min:
+    stz MOUSE_X_POS
+    bra @exit_long_5
+@x_max:
+    lda #$FF
     sta MOUSE_X_POS
     bra @exit_long_5
 
 @report_y:
-    stz MOUSE_REPORT  ; reset expected report
-    lda MOUSE_FLAGS
-    and #$20          ; negative bit for y
-    beq @addy
-    lda MOUSE_Y_POS 
-    sec
-    sbc MOUSE_BYTE
-    bcc @exit_long_3  ; in overflow, don't add
-    sta MOUSE_Y_POS
-    bra @exit_long_3
-    
-@addy:
+    stz MOUSE_REPORT      ; reset expected report
     clc
-    lda MOUSE_Y_POS
+    lda MOUSE_Y_POS 
     adc MOUSE_BYTE
-    bcs @exit_long_3  ; in overflow, don't add
+    cmp MOUSE_Y_POS      ; if carry is set, then the sum >= previous x, else sum < previous x
     sta MOUSE_Y_POS
+    beq @exit_long_3
+    bcs @y_gt
+
+@y_lt:
+    lda MOUSE_FLAGS
+    asl
+    asl
+    bpl @y_max         ; if new pos is < old pos but not a negative movement, cap to max   
     bra @exit_long_3
+@y_gt:
+    lda MOUSE_FLAGS
+    asl
+    asl
+    bmi @y_min        ; if new pos > old pos but not a positive moment, cap to min
+    bra @exit_long_3
+@y_min:
+    stx MOUSE_Y_POS
+    bra @exit_long_3    
+@y_max:
+    lda #$FF
+    sta MOUSE_Y_POS
+    bra @exit_long_3    
 
 @shift:
     lda #$4
@@ -1519,8 +1542,7 @@ nmi:
 
     ; read inputs from gamepads
     ; first, latch the input
-    lda #$00
-    sta PORTB
+    stz PORTB
     lda #GC_LATCH
     sta PORTB
 
@@ -1556,8 +1578,8 @@ nmi:
     bne @read_controllers
     
     ; we're done, bring the clock back down
-    lda #$00          ; first time through, this drops the latch pulse
-    sta PORTB         
+    ; first time through, this drops the latch pulse
+    stz PORTB         
     ply
 
     ;   set the buttons
@@ -1584,8 +1606,7 @@ nmi:
     ror
     sta $C063
 
-    lda #$00
-    sta T2L
+    stz T2L
     lda #$6
     sta T2H  ; set T2 for half way
 
@@ -1667,9 +1688,8 @@ nmi:
     ; should be zero - maybe check later
     lda #PS2_KEYS
     sta KBSTATE
-    lda #00
-    sta KBBIT   ; reset to bit zero
-    sta KBTEMP  ; clear the temp key
+    stz KBBIT   ; reset to bit zero
+    stz KBTEMP  ; clear the temp key
     ;inc KBDBG
 @exit_long_2:
     jmp @exit
