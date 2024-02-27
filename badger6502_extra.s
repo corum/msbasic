@@ -228,14 +228,21 @@ SS_RW_BANK1    = $C08B ; Read/write RAM bank 1 also $C08F
 ;CSWL           = $36
 
 mouse_on:
+    stz MOUSE_FLAGS
+    stz MOUSE_X_POS
+    stz MOUSE_Y_POS
+    stz MOUSE_BYTE
+    stz MOUSE_REPORT
+    stz MOUSE_STATE
+
     lda #$F3
     sta MOUSE_SEND
     jsr mouse_message   ; set sampling rate
     jsr ps2_read_packet
 
-    lda #$0A
+    lda #$05
     sta MOUSE_SEND
-    jsr mouse_message  ; set sampling rate to 10 reports per second
+    jsr mouse_message  ; set sampling rate to 5 reports per second
     jsr ps2_read_packet
 
     lda #$E8 ; set resolution
@@ -1410,30 +1417,38 @@ nmi:
 check_via_interrupts:
     ; check the IFR to see if it's the VIA - aka the keyboard
     lda IFR
+    bmi @exit_long
+
     ror
     ldx #$1
     stx IFR
     bcs @ps2_keyboard_decode_long   ; bit 0
+
     ror
     ldx #$2
     stx IFR
     bcs @ps2_mouse_decode           ; bit 1
+
     ror
     ldx #$4
     stx IFR
     bcs @shift_long                 ; bit 2
+
     ror
     ldx #$8
     stx IFR
     bcs @joystick_long              ; bit 3
+
     ror
     ldx #$10
     stx IFR
     bcs @kbstrobe                   ; bit 4
+
     ror
     ldx #$20
     stx IFR
     bcs @T2_long                    ; bit 5
+
     ror
     ldx #$40
     stx IFR
@@ -1469,7 +1484,6 @@ check_via_interrupts:
 
 
 @ps2_mouse_decode:          ; decode 11 bits from the PS/2 mouse
-     ;lda PORTB ; clear the interrupt
     lda $D000
     inc $D000
     cmp $D000
@@ -1509,7 +1523,7 @@ check_via_interrupts:
     beq @t2_gamepads
     
     lda #$7F
-    sta $C065         ; form ouse mode, terminate Y axis here
+    sta $C065         ; for mouse mode, terminate Y axis here
     bra @exit_long_3
 
 @t2_gamepads:
@@ -1589,19 +1603,19 @@ check_via_interrupts:
     sta $C066
     sta $C067
 
-    lda PORTB
+    ;lda PORTB
     lda JOYSTICK_MODE
     beq @joystick_gamepads_long
 
 @joystick_mouse:
     lda MOUSE_X_POS
-    ;bne @set_x_timer
-    ;stz $C064         ; trigger x-axis immediately
-    ;bra @joystick_mouse_y
+    bne @set_x_timer
+    stz $C064         ; trigger x-axis immediately
+    bra @joystick_mouse_y
 @set_x_timer:
     ; calculate time for X axis given MOUSE_X_POS
     ; value of MOUSE_X_POS * 11
-    ; left shift 3 times for * 8
+    ; left shift 3 times for * 8 and add $200 as a fast approximation
     stz MOUSE_T1_H
     lda MOUSE_X_POS
     sta MOUSE_T1_L
@@ -1613,23 +1627,23 @@ check_via_interrupts:
     rol MOUSE_T1_H
     sta MOUSE_T1_L
 
-    ldx #$3
-@x_times_3:
-    clc
-    lda MOUSE_T1_L
-    adc MOUSE_X_POS
-    sta MOUSE_T1_L
-    lda MOUSE_T1_H
-    adc #$0
-    sta MOUSE_T1_H
-    dex
-    bne @x_times_3
+;    ldx #$11
+;@x_times_11:
+;    clc
+;    lda MOUSE_T1_L
+;    adc MOUSE_X_POS
+;    sta MOUSE_T1_L
+;    lda MOUSE_T1_H
+;    adc #$0
+;    sta MOUSE_T1_H
+;    dex
+;    bne @x_times_11
 
 @joystick_mouse_y:
     lda MOUSE_Y_POS
-    ;bne @set_y_timer
-    ;stz $C065         ; trigger y-axis immediately
-    ;bra @set_t1
+    bne @set_y_timer
+    stz $C065         ; trigger y-axis immediately
+    bra @set_timers
 @set_y_timer:
     ; calculate time for Y axis given MOUSE_Y_POS
     stz MOUSE_T2_H
@@ -1643,29 +1657,42 @@ check_via_interrupts:
     rol MOUSE_T2_H
     sta MOUSE_T2_L
 
-    ldx #$3
-@y_times_3:
-    clc
-    lda MOUSE_T2_L
-    adc MOUSE_Y_POS
-    sta MOUSE_T2_L
-    lda MOUSE_T2_H
-    adc #$0
-    sta MOUSE_T2_H
-    dex
-    bne @y_times_3
+;    ldx #$11
+;@y_times_11:
+;    clc
+;    lda MOUSE_T2_L
+;    adc MOUSE_Y_POS
+;    sta MOUSE_T2_L
+;    lda MOUSE_T2_H
+;    adc #$0
+;    sta MOUSE_T2_H
+;    dex
+;    bne @y_times_11
 
-    inc MOUSE_T2_H
+@set_timers:
+    lda MOUSE_T2_L
+    ora MOUSE_T2_H
+    beq @skip_t2
+
+    clc
     lda MOUSE_T2_L
     sta T2L
     lda MOUSE_T2_H
+    adc #$2
     sta T2H
+@skip_t2:
 
-    inc MOUSE_T1_H
+    lda MOUSE_T1_H
+    ora MOUSE_T1_L
+    beq @skip_t1
+
+    clc
     lda MOUSE_T1_L
     sta T1CL
     lda MOUSE_T1_H
+    adc #$2
     sta T1CH 
+@skip_t1:    
     jmp @exit
 
 @joystick_gamepads:
