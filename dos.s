@@ -293,8 +293,7 @@ cmd_bsave:
     jsr fat32_file_write
     bcs display_error_long
 
-    jsr fat32_open_cd
-    rts
+    jmp fat32_open_cd
 
 display_error_long:
     jmp display_error
@@ -318,16 +317,14 @@ cmd_chdir:
     jsr fat32_opendirent
 
 @ok:
-    jmp display_ok
+display_ok:
+    jsr display_message
+    .byte "OK", $8D, 0
+    rts
 
 display_error:
     jsr display_message
     .byte "ERR", $8D, 0
-    rts
-
-display_ok:
-    jsr display_message
-    .byte "OK", $8D, 0
     rts
 
 cmd_del:
@@ -343,8 +340,7 @@ cmd_del:
     bcs file_not_found
 
     jsr fat32_deletefile
-    jsr fat32_open_cd
-    rts
+    jmp fat32_open_cd
 
 file_not_found:
     jsr fat32_open_cd
@@ -395,7 +391,7 @@ load_proc:
 
 invalid_address:
     jsr display_message
-    .byte "BADD", $8D, 0     
+    .byte "ADR", $8D, 0     
     rts
 
     ;bra @success
@@ -433,8 +429,8 @@ cmd_owrite:
     jsr fat32_file_write
     bcs @error
 
-    jsr fat32_open_cd
-    rts
+    jmp fat32_open_cd   ; rts from fat32_open_cd
+    
 @error:
     jmp display_error
 @bsave_instead:
@@ -444,13 +440,12 @@ cmd_owrite:
 
 cmd_fload:
     jsr load_proc_3
-    jsr fat32_file_read_part
-    rts
+    jmp fat32_file_read_part     ; rts from fat32_read_file_art    
 
 cmd_bload:
     jsr load_proc
-    jsr fat32_file_read
-    rts
+    jmp fat32_file_read         ; rts from fat32_file_read
+    
 
 cmd_brun:
     jsr load_proc

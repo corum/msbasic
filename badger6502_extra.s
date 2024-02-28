@@ -55,15 +55,21 @@ MSG_ADDR_HIGH  = $B7
 ;VIA config flags 
 ICLR           = %01111111  ; clear all VIA interrupts
 
+; PORTA
+;PS2 Keyboard 
+PS2_KB_DATA    = %10000000 
+PS2_KB_CLK     = %01000000 
+
 ;SD card pins
 SD_CS          = %00010000
 SD_SCK         = %00001000
 SD_MOSI        = %00000100
 SD_MISO        = %00000010
 
-PORTA_OUTPUTPINS = %11100000 | SD_CS | SD_SCK | SD_MOSI
+PORTA_OUTPUTPINS = SD_CS | SD_SCK | SD_MOSI
 
-;GAMEPAD pins
+; PORT_B
+; GAMEPAD pins
 GC_CLOCK       = %10000000
 GC_LATCH       = %01000000
 GC_DATA1       = %00100000
@@ -121,7 +127,7 @@ FONTPTR_H      = $CE16
 KBSTATE        = $CE17
 KBTEMP         = $CE18
 KBCURR         = $CE19 
-KBBIT          = $CE1A
+
 KBEXTEND       = $CE1B
 KBKEYUP        = $CE1C
 KBDBG          = $CE1D
@@ -141,7 +147,9 @@ MOUSE_T1_H     = $CE2A
 MOUSE_T2_L     = $CE2B
 MOUSE_T2_H     = $CE2C
 JOYSTICK_MODE  = $CE2D
-
+KBD_BYTE       = $CE2E
+KBD_SEND       = $CE2F
+KBD_LEDS       = $CE30
 
 ; Joystick modes
 JOY_MODE_PADS  = 0
@@ -238,27 +246,38 @@ mouse_on:
     lda #$F3
     sta MOUSE_SEND
     jsr mouse_message   ; set sampling rate
-    jsr ps2_read_packet
+    jsr ps2_read_mouse_packet
 
     lda #$0A
     sta MOUSE_SEND
     jsr mouse_message  ; set sampling rate to 5 reports per second
-    jsr ps2_read_packet
+    jsr ps2_read_mouse_packet
 
     lda #$E8 ; set resolution
     sta MOUSE_SEND
     jsr mouse_message
-    jsr ps2_read_packet
+    jsr ps2_read_mouse_packet
 
     lda #$02 ; set resolution to 4 count/mm
     sta MOUSE_SEND
     jsr mouse_message
-    jsr ps2_read_packet
+    jsr ps2_read_mouse_packet
 
     lda #$F4
     sta MOUSE_SEND
     jsr mouse_message
-    jsr ps2_read_packet
+    jsr ps2_read_mouse_packet
+
+@wait_data_high:
+    lda PORTB
+    ror
+    bcc @wait_data_high
+
+@wait_clock_high:
+    lda PORTB
+    ror
+    ror
+    bcc @wait_clock_high
 
     jsr via_init ; turn interrupts back on
     rts
@@ -355,19 +374,19 @@ mouse_send_bit:
     pla
     rts
 
-ps2_read_packet:
+ps2_read_mouse_packet:
     lda #$80
     sta MOUSE_BYTE
 
-    jsr ps2_readbit ; start bit
+    jsr ps2_mouse_readbit ; start bit
     
 @loop:
-    jsr ps2_readbit ; bit
+    jsr ps2_mouse_readbit ; bit
     ror MOUSE_BYTE
     bcc @loop
 
-    jsr ps2_readbit ; parity
-    jsr ps2_readbit ; stop bit
+    jsr ps2_mouse_readbit ; parity
+    jsr ps2_mouse_readbit ; stop bit
 
     lda MOUSE_BYTE
     jsr print_hex
@@ -377,25 +396,205 @@ ps2_read_packet:
 
 ; ps2_readbit waits on ps/2 clock
 ; populates carry flag with data bit
-ps2_readbit:
-    jsr ps2_waitlow
+ps2_mouse_readbit:
+    jsr ps2_mouse_waitlow
     lda PORTB          ; read a bit
     ror                ; populate the carry bit
-    jsr ps2_waithigh
+    jsr ps2_mouse_waithigh
     rts
 
-ps2_waitlow:
+ps2_mouse_waitlow:
     ; wait for mouse clock to go low
     lda PORTB
     and #PS2_MOUSE_CLK
-    bne ps2_waitlow
+    bne ps2_mouse_waitlow
     rts
 
-ps2_waithigh:
+ps2_mouse_waithigh:
     ; wait for mouse clock to go high
     lda PORTB
     and #PS2_MOUSE_CLK
-    beq ps2_waithigh
+    beq ps2_mouse_waithigh
+    rts
+
+; =================================================================================
+set_kbd_leds:
+
+    lda #$F0             ; scanode set
+    sta KBD_SEND
+    jsr ps2_kbd_message   
+    jsr ps2_kbd_read_packet
+
+    lda #$02
+    sta KBD_SEND
+    jsr ps2_kbd_message     ; scancode set #2
+    jsr ps2_kbd_read_packet
+
+    lda #$ED ; set LEDs
+    sta KBD_SEND
+    jsr ps2_kbd_message
+    jsr ps2_kbd_read_packet
+
+    stz KBD_SEND
+    clc
+    lda KEYSTATE + $58 ; caps lock
+    ror
+    rol KBD_SEND
+    lda KEYSTATE + $77 ; num lock
+    ror
+    rol KBD_SEND
+    lda KEYSTATE + $7E ; scroll lock
+    ror
+    rol KBD_SEND
+    jsr ps2_kbd_message
+    jsr ps2_kbd_read_packet
+
+    lda #$F4
+    sta KBD_SEND
+    jsr ps2_kbd_message
+    jsr ps2_kbd_read_packet
+
+@wait_data_high:
+    lda PORTA
+    rol
+    bcc @wait_data_high
+
+@wait_clock_high:
+    lda PORTA
+    rol
+    rol
+    bcc @wait_clock_high
+
+    jmp via_init ; turn interrupts back on
+
+
+ps2_kbd_message:
+    lda #%01111111 
+    sta IER        ; disable VIA interrupts for now
+
+    lda #PS2_KB_CLK
+    sta DDRA       ; make clock output pin
+
+    lda #$00
+    sta PORTA      ; pull clock low
+    
+    ldy #$0
+    ; wait for 100 microseconds+
+    ldx #$30
+@pause:
+    dex
+    bne @pause
+
+    lda #PS2_KB_DATA | PS2_KB_CLK
+    sta DDRA       ; take the data as output
+
+    lda #$00
+    sta PORTA      ; pull data low
+
+    lda #PS2_KB_DATA  
+    sta DDRA       ; release the clock line
+
+    ldy #$07 ; 8 bits
+    lda KBD_SEND ; ready device code
+
+    clc
+    jsr kbd_send_bit   ; start bit is a zero
+
+    ldx #$1 ; odd parity
+@sendbyte:
+    ror                  ; bit 0 -> carry
+    bcc @send
+    inx                  ; increment x for parity, if carry is set, it's a 1
+@send:
+    jsr kbd_send_bit
+    dey
+    bpl @sendbyte
+
+    txa ; parity stored in X
+    ror ; move bit 0->Carry
+    jsr kbd_send_bit
+
+    sec ; set carry for stop bit
+    jsr kbd_send_bit
+
+    ; release the clock
+    lda #$0
+    sta DDRA
+
+@wait_data_high:
+    lda PORTA
+    rol
+    bcc @wait_data_high
+
+@wait_clock_high:
+    lda PORTA
+    rol
+    rol
+    bcc @wait_clock_high
+
+    rts
+
+kbd_send_bit:
+    pha
+;set data
+    ror                       ; PS2_KB_DATA
+    sta PORTA
+
+@waithigh:
+    lda PORTA
+    and #PS2_KB_CLK
+    beq @waithigh
+
+; wait for clock to drops
+@waitlow:
+    lda PORTA
+    and #PS2_KB_CLK
+    bne @waitlow
+
+    pla
+    rts
+
+ps2_kbd_read_packet:
+    lda #$80
+    sta KBD_BYTE
+
+    jsr ps2_kbd_readbit ; start bit
+    
+@loop:
+    jsr ps2_kbd_readbit ; bit
+    ror KBD_BYTE
+    bcc @loop
+
+    jsr ps2_kbd_readbit ; parity
+    jsr ps2_kbd_readbit ; stop bit
+
+    lda KBD_BYTE
+    jsr print_hex
+    jsr print_crlf
+
+    rts
+
+; ps2_readbit waits on ps/2 clock
+; populates carry flag with data bit
+ps2_kbd_readbit:
+    jsr ps2_kbd_waitlow
+    lda PORTA          ; read a bit
+    rol                ; populate the carry bit
+    jsr ps2_kbd_waithigh
+    rts
+
+ps2_kbd_waitlow:
+    ; wait for kbd clock to go low
+    lda PORTA
+    and #PS2_KB_CLK
+    bne ps2_kbd_waitlow
+    rts
+
+ps2_kbd_waithigh:
+    ; wait for kbd clock to go high
+    lda PORTA
+    and #PS2_KB_CLK
+    beq ps2_kbd_waithigh
     rts
 
 ; =================================================================================
@@ -413,6 +612,9 @@ via_init:
     lda #$0
     sta ACR
 
+    lda #$7F
+    sta IFR
+    
     lda #%11111011 
     sta IER        ; enable interrupts for CA2, CA1, CB1, CB2 and Timer1, Timer2
 
@@ -426,11 +628,8 @@ init:
     sta KBSTATE
     sta KBTEMP
     sta KBCURR
-    sta KBBIT
     sta KBEXTEND
     sta KBKEYUP
-    sta KBDBG
-    sta KBDBG2
     sta KEYTEMP
     sta KEYLAST
 
@@ -1632,7 +1831,6 @@ check_via_interrupts:
 
     lda MOUSE_X_POS
     sta MOUSE_T1_L
-    lsr
     bne @set_x_timer
     stz $C064         ; trigger x-axis immediately
     bra @joystick_mouse_y
@@ -1663,7 +1861,6 @@ check_via_interrupts:
 @joystick_mouse_y:
     lda MOUSE_Y_POS
     sta MOUSE_T2_L
-    lsr
     bne @set_y_timer
     stz $C065         ; trigger y-axis immediately
     bra @set_timers
@@ -1836,22 +2033,16 @@ check_via_interrupts:
     jmp @exit
 
 @ps2_keyboard_decode:
-    
     lda #$1
     sta IFR ; clear interrupt
 
-    lda PORTA
-    ror
-    ror       ; rotate into high order bit
-    and #$80
-
     ldx KBSTATE
-    
-    cpx #PS2_KEYS
-    beq @keys
 
     cpx #PS2_START
     beq @start 
+
+    cpx #PS2_KEYS
+    beq @keys
       
     cpx #PS2_PARITY
     beq @parity
@@ -1859,51 +2050,35 @@ check_via_interrupts:
     cpx #PS2_STOP
     beq @stop
 
-    ;lda #$42
-    ;jsr tx_char_sync
-
     ; should never get here
     bra @exit_long_2
 
 @start:
     ; should be zero - maybe check later
-    lda #PS2_KEYS
-    sta KBSTATE
-    stz KBBIT   ; reset to bit zero
-    stz KBTEMP  ; clear the temp key
-    ;inc KBDBG
+    inc KBSTATE     ; start->keys
+    lda #$80
+    sta KBTEMP      ; flip bit 7 so when we ror we're done when carry is set
 @exit_long_2:
     jmp @exit
 
 @keys:
-    clc
+    lda PORTA
+    rol             ; load PS2_KB_DATA into carry flag
     ror KBTEMP
-    ora KBTEMP
-    sta KBTEMP
-    ;inc KBDBG
-    inc KBBIT
-    lda KBBIT
-    cmp #$08
-    beq @toparity
+    bcs @toparity
     bra @exit_long_2
 
 @toparity:
-    lda #PS2_PARITY
-    sta KBSTATE
+    inc KBSTATE  ; keys->parity
     bra @exit_long_2
 
 @parity:
     ; should probably check the parity bit - all 1 data bits + parity bit should be odd #
-    lda #PS2_STOP
-    sta KBSTATE
-    ;inc KBDBG
+    inc KBSTATE   ; parity->stop
     bra @exit_long_2
 
 @stop:
-    ; write our temp kb to kbbuf
-    ;inc KBDBG
-    lda #PS2_START
-    sta KBSTATE
+    stz KBSTATE  ; stop->start
     
 @process_key:
     lda KBTEMP    
@@ -1921,40 +2096,42 @@ check_via_interrupts:
  
 @notkeyup:
     lda KBKEYUP        ; check the key up flag
-    cmp #$00
     beq @setkeystate
 
 @clearkeystate:        ; this is the key up path TODO: need to update key state to use ascii code instead of scan code
-    ldx KBTEMP
-    lda #$00
     ; clear flags
-    sta KBEXTEND
-    sta KBKEYUP
-    ;sta KEYRAM
+    stz KBEXTEND
+    stz KBKEYUP
+    ldx KBTEMP
 
     cpx #$58
-    bne @clear
-    bra @exit_long_2
+    beq @exit_long_2
+    cpx #$7E
+    beq @exit_long_2
+    cpx #$77
+    beq @exit_long_2
 
 @clear:
-    sta KEYSTATE,x
+    stz KEYSTATE,x
     bra @exit_long_2
 
 @setkeystate:          ; set the key state - this is key down path
     ldx KBTEMP
-    cpx #$58
-    beq @capstoggle
+    cpx #$58 ; caps lock
+    beq @togglekey
+    cpx #$7E ; scroll lock
+    beq @togglekey
+    cpx #$77 ; num lock
+    beq @togglekey
 
     lda #$01
     ora KBEXTEND
-    sta KEYSTATE, x
+    sta KEYSTATE, X
     stx KEYLAST
 
     ; check for non printable 
-    ; x already contains KBTEMP
-    ;ldx KBTEMP         ; store in buffer only if it's a key down for now
-    
-    cpx #$12          ; left shfit
+
+    cpx #$12          ; left shift
     beq @nonprint
     cpx #$59          ; right shift
     beq @nonprint
@@ -1964,8 +2141,6 @@ check_via_interrupts:
     beq @nonprint 
 
     cpx #$07
-    beq @nonprint
-    cpx #$7E
     beq @nonprint
 
     ; check for shift state
@@ -2010,7 +2185,7 @@ check_via_interrupts:
     inc KBCURR
     bra @checkbuttons
 
-@capstoggle:
+@togglekey:
     lda KEYSTATE,X
     beq @turnon
     stz KEYSTATE,x
@@ -2031,7 +2206,7 @@ check_via_interrupts:
     sta JOYSTICK_MODE
     stz MOUSE_STATE
     stz MOUSE_REPORT
-    
+
 @exit:
 nmi_exit:
     jmp check_via_interrupts
