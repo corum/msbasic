@@ -419,7 +419,7 @@ ps2_mouse_waithigh:
 
 ; =================================================================================
 set_kbd_leds:
-
+    phx
     lda #$F0             ; scanode set
     sta KBD_SEND
     jsr ps2_kbd_message   
@@ -464,7 +464,7 @@ set_kbd_leds:
     rol
     rol
     bcc @wait_clock_high
-
+    plx
     jmp via_init ; turn interrupts back on
 
 
@@ -566,13 +566,8 @@ ps2_kbd_read_packet:
     bcc @loop
 
     jsr ps2_kbd_readbit ; parity
-    jsr ps2_kbd_readbit ; stop bit
+    jmp ps2_kbd_readbit ; stop bit
 
-    lda KBD_BYTE
-    jsr print_hex
-    jsr print_crlf
-
-    rts
 
 ; ps2_readbit waits on ps/2 clock
 ; populates carry flag with data bit
@@ -580,8 +575,7 @@ ps2_kbd_readbit:
     jsr ps2_kbd_waitlow
     lda PORTA          ; read a bit
     rol                ; populate the carry bit
-    jsr ps2_kbd_waithigh
-    rts
+    jmp ps2_kbd_waithigh
 
 ps2_kbd_waitlow:
     ; wait for kbd clock to go low
@@ -614,7 +608,7 @@ via_init:
 
     lda #$7F
     sta IFR
-    
+
     lda #%11111011 
     sta IER        ; enable interrupts for CA2, CA1, CB1, CB2 and Timer1, Timer2
 
@@ -2189,23 +2183,26 @@ check_via_interrupts:
     lda KEYSTATE,X
     beq @turnon
     stz KEYSTATE,x
-    bra @nonprint
+    bra @setleds
 
 @turnon:
     lda #$81
     sta KEYSTATE,x
-    
-@nonprint:
-@checkbuttons:
-    
+
+@setleds:
+    jsr set_kbd_leds
+   
     ; if scroll lock is pressed, toggle joystick mode between 0 and 1
-    lda KEYSTATE + $7E
-    beq @exit
+    cpx #$7E
+    bne @exit
     lda JOYSTICK_MODE
     eor #$1
     sta JOYSTICK_MODE
     stz MOUSE_STATE
     stz MOUSE_REPORT
+
+@nonprint:
+@checkbuttons:
 
 @exit:
 nmi_exit:
