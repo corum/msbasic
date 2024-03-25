@@ -79,7 +79,6 @@ fat32_temp                      = fat32_variables + $37  ; 4 bytes
 fat32_byte_offset               = fat32_variables + $3B  ; 2 bytes
 fat32_errorstage                = fat32_bytesremaining  ; only used during initialization
 
-
 FSTYPE_FAT32 = 12
 
 .include "libsd.s"

@@ -80,76 +80,33 @@ PS2_MOUSE_DATA = %00000001
 
 PORTB_OUTPUTPINS = GC_CLOCK | GC_LATCH
 
-;CONSOLE
-CURSOR_X       = $CE00
-CURSOR_Y       = $CE01
-
-;GRAPHICS
-YADD           = $CE02
-XADD           = $CE03
-X1_            = $CE04
-Y1_            = $CE05
-X2_            = $CE06
-
-; TEXT MODE
-
-TEXT           = $400
-CURSOR_ADDR    = $50
-CURSOR_ADDR_H  = $51
-CHAR_DRAW      = $52
-
-ORIGIN_L       = $53
-ORIGIN_H       = $54
-SCREEN_L       = $55
-SCREEN_H       = $56
-
-HIRESPAGE      = $57
-HIRESPAGE_H    = $58
-
-DRAW_WIDTH     = $CE07
-DRAW_WIDTH_H   = $CE08
-DRAW_HEIGHT    = $CE09
-DRAW_COLOR     = $CE0A
-X1             = $CE0B
-X1_H           = $CE0C
-X2             = $CE0D
-X2_H           = $CE0E
-Y1             = $CE0F
-Y2             = $CE10
-XD             = $CE11   ; xdelta for line drawing
-YD             = $CE12   ; ydelta for line drawing
-XT             = $CE13   ; x temp
-YT             = $CE14   ; y temp
-FONTPTR        = $CE15
-FONTPTR_H      = $CE16
-
 ; PS/2 keyboard memory locations
-KBSTATE        = $CE17
-KBTEMP         = $CE18
-KBCURR         = $CE19 
+KBSTATE        = $CE00
+KBTEMP         = $CE01
+KBCURR         = $CE02 
 
-KBEXTEND       = $CE1B
-KBKEYUP        = $CE1C
-KBDBG          = $CE1D
-KBDBG2         = $CE1E
-KEYTEMP        = $CE1F
-KEYLAST        = $CE20
-MUTE_OUTPUT    = $CE21
-MOUSE_SEND     = $CE22
-MOUSE_FLAGS    = $CE23
-MOUSE_X_POS    = $CE24
-MOUSE_Y_POS    = $CE25
-MOUSE_BYTE     = $CE26
-MOUSE_REPORT   = $CE27
-MOUSE_STATE    = $CE28
-MOUSE_T1_L     = $CE29
-MOUSE_T1_H     = $CE2A
-MOUSE_T2_L     = $CE2B
-MOUSE_T2_H     = $CE2C
-JOYSTICK_MODE  = $CE2D
-KBD_BYTE       = $CE2E
-KBD_SEND       = $CE2F
-KBD_LEDS       = $CE30
+KBEXTEND       = $CE03
+KBKEYUP        = $CE04
+KBDBG          = $CE05
+KBDBG2         = $CE06
+KEYTEMP        = $CE07
+KEYLAST        = $CE08
+MUTE_OUTPUT    = $CE09
+MOUSE_SEND     = $CE0A
+MOUSE_FLAGS    = $CE0B
+MOUSE_X_POS    = $CE0C
+MOUSE_Y_POS    = $CE0D
+MOUSE_BYTE     = $CE0E
+MOUSE_REPORT   = $CE0F
+MOUSE_STATE    = $CE10
+MOUSE_T1_L     = $CE11
+MOUSE_T1_H     = $CE12
+MOUSE_T2_L     = $CE13
+MOUSE_T2_H     = $CE14
+JOYSTICK_MODE  = $CE15
+KBD_BYTE       = $CE16
+KBD_SEND       = $CE17
+KBD_LEDS       = $CE18
 
 ; Joystick modes
 JOY_MODE_PADS  = 0
@@ -668,10 +625,7 @@ init:
     sta SS_BASROM_OFF
     bit SS_R_ROM2
 
- ;   stz INPUTBUF
     stz INPUTBUFFER
-    stz CURSOR_X
-    stz CURSOR_Y
 
 ; initialize the ACIA
     stz A_RES      ; soft reset (value not important)
@@ -690,25 +644,19 @@ init:
 
     jsr via_init
     
-    ; set graphics page
-    lda #$20
-    sta SCREEN_H
-    lda #$00
-    sta SCREEN_L
-
-
     cli
 
     lda #$9B
 @loop:
     ;jsr WOZMON
 
-    jsr     SETNORM         ;  set screen mode
-    jsr     A2INIT          ;  and init kbd/screen
-    jsr     SETVID          ;  as I/O dev's
-    jsr     SETKBD
+    jsr     RESET
+    ;jsr     SETNORM         ;  set screen mode
+    ;jsr     A2INIT          ;  and init kbd/screen
+    ;jsr     SETVID          ;  as I/O dev's
+    ;jsr     SETKBD
     jsr     hook_buffer
-    jsr     cls
+    ;jsr     cls
 
     jsr     MON
 

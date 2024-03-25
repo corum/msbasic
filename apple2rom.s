@@ -1321,7 +1321,7 @@ MON:
     cld                     ;must set hex mode!
     jsr     BELL
 MONZ:
-    lda     #$aa            ;'*' prompt for mon
+    lda     #$AA            ;'*' prompt for mon
     sta     PROMPT
     jsr     GETLNZ          ;read a line
     jsr     ZMODE           ;clear mon mode, scan idx
