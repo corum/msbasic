@@ -1899,14 +1899,14 @@ check_via_interrupts:
 
     ;   set the buttons
     ; button pressed
-    lda GAMEPAD1 + GAMEPAD_Y
+    lda GAMEPAD1 + GAMEPAD_X
     ora GAMEPAD1 + GAMEPAD_B
     ;ora KEYSTATE + $12  ; shift key
     ror
     ror
     sta $C061
      
-    lda GAMEPAD1 + GAMEPAD_X
+    lda GAMEPAD1 + GAMEPAD_Y
     ora GAMEPAD1 + GAMEPAD_A
     ora GAMEPAD2 + GAMEPAD_Y
     ora GAMEPAD2 + GAMEPAD_B
@@ -2102,7 +2102,7 @@ check_via_interrupts:
 ; check for caps lock, if it's on, send low version
     ldx KEYSTATE + $58
     beq @caps
-    ;and #$7F
+    ora #$80
     @caps:
     sta KEYRAM
     inc KBCURR
