@@ -682,15 +682,15 @@ textmode:
     
 ; loderunner
 _loderunner:
-    lda #2
+    lda #8
     sta DEST_HIGH
-    sta SOURCE_HIGH
 
+    stz SOURCE_HIGH
     stz DEST_LOW
     stz SOURCE_LOW
     stz RD_BYTES_LOW
 
-    lda #$BE
+    lda #$B6
     sta RD_BYTES_HIGH
 
     stz RD_LOW
