@@ -650,11 +650,11 @@ init:
 @loop:
     ;jsr WOZMON
 
-    jsr     RESET
-    ;jsr     SETNORM         ;  set screen mode
-    ;jsr     A2INIT          ;  and init kbd/screen
-    ;jsr     SETVID          ;  as I/O dev's
-    ;jsr     SETKBD
+    ;jsr     RESET
+    jsr     SETNORM         ;  set screen mode
+    jsr     A2INIT          ;  and init kbd/screen
+    jsr     SETVID          ;  as I/O dev's
+    jsr     SETKBD
     jsr     hook_buffer
     ;jsr     cls
 
