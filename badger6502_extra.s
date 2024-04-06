@@ -1,5 +1,7 @@
 .segment "A2MON"
 .include "apple2rom.s"
+.segment "A2DISK"
+.include "apple2disk.s"
 
 .segment "BANKROM"
 
