@@ -8,8 +8,8 @@ echo $i
 ca65 --cpu 65C02 -t none -D $i msbasic.s -o tmp/$i.o -l tmp/$i.lst -g  --list-bytes 0 &&
 ld65 -C $i.cfg tmp/$i.o -o tmp/$i.bin -Ln tmp/$i.lbl -vm -m tmp/$i.map --dbgfile tmp/$i.dbg
 
-cp tmp/badger6502.* /mnt/c/eb6502/targets
-cp *.s /mnt/c/eb6502/targets
+cp tmp/badger6502.* /mnt/c/3ric/emulator/data
+cp *.s /mnt/c/3ric/emulator/data
 
 done
 

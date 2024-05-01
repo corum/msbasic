@@ -32,5 +32,6 @@
         jmp     joytest                   ;$E033
         jmp     keytest                   ;$E036
         jmp     mousetest                 ;$E039
+        jmp     picodriveterm             ;$E03C
 
 .endif
