@@ -1,16 +1,16 @@
-;********************************************************************************
-;* Disk ][ controller card "BOOT0" code, found in the slot ROM.  Reads the      *
-;* BOOT1 code from track 0, sector 0, and jumps to it.                          *
-;*                                                                              *
-;* Copyright Apple Computer Inc.                                                *
-;*                                                                              *
-;* Written by [a genius...Woz?]                                                 *
-;********************************************************************************
-;* Extracted from AppleWin at $C600.                                            *
-;*                                                                              *
-;* Project created by Andy McFadden, using 6502bench SourceGen v1.5             *
-;* Last updated 2020/01/15                                                      *
-;********************************************************************************
+; ********************************************************************************
+; * Disk ][ controller card "BOOT0" code, found in the slot ROM.  Reads the      *
+; * BOOT1 code from track 0, sector 0, and jumps to it.                          *
+; *                                                                              *
+; * Copyright Apple Computer Inc.                                                *
+; *                                                                              *
+; * Written by [a genius...Woz?]                                                 *
+; ********************************************************************************
+; * Extracted from AppleWin at $C600.                                            *
+; *                                                                              *
+; * Project created by Andy McFadden, using 6502bench SourceGen v1.5             *
+; * Last updated 2020/01/15                                                      *
+; ********************************************************************************
 
 DISKSTACK     =     $0100  ; {addr/256}
 TWOS_BUFFER   =     $0300  ; {addr/86}  ;holds the 2-bit chunks
@@ -25,7 +25,6 @@ IWM_Q7_OFF    =     $c08e               ;WP sense/read
 MON_WAIT      =     $fca8               ;delay for (26 + 27*Acc + 5*(Acc*Acc))/2 cycles
 MON_IORTS     =     $ff58               ;JSR here to find out where one is
 
-;              .org    $c600
 data_ptr      =     $26    ; {addr/2}   ;pointer to BOOT1 data buffer
 slot_index    =     $2b    ; {addr/1}   ;slot number << 4
 bits          =     $3c    ; {addr/1}   ;temp storage for bit manipulation
@@ -34,7 +33,6 @@ found_track   =     $40    ; {addr/1}   ;track found
 track         =     $41    ; {addr/1}   ;track to read
 
 ENTRY:
-
                 ldx     #$20              ;20/00/03 is the controller signature
 
 ; 
@@ -90,7 +88,8 @@ check_dub0:
               tya                       ;we have a winner... store Y-reg to memory
               sta     CONV_TAB,x        ;actual lookup will be on bytes with hi bit set
               iny                       ; so they'll read from CONV_TAB-128
-reject:       inx                       ;try next candidate
+reject:       
+              inx                       ;try next candidate
               bpl     CreateDecTabLoop
 ; 
 ; Prep the hardware.
@@ -157,7 +156,7 @@ ReadSector_C:
               lda     IWM_Q6_OFF,x      ;grab another byte
               bpl     @rdbyte2
               cmp     #$aa              ;is it $aa?
-              bne     @check_d5          ;no, check if it's another $d5
+              bne     @check_d5         ;no, check if it's another $d5
               nop                       ;(?)
 @rdbyte3:      
               lda     IWM_Q6_OFF,x      ;grab a third byte
@@ -181,7 +180,7 @@ hdr_loop:
 @rdbyte1:
               lda     IWM_Q6_OFF,x      ;read first part
               bpl     @rdbyte1
-              rol                      ;first byte has bits 7/5/3/1
+              rol                       ;first byte has bits 7/5/3/1
               sta     bits
 @rdbyte2:      
               lda     IWM_Q6_OFF,x      ;read second part

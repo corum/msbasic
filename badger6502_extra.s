@@ -2,6 +2,7 @@
 .include "apple2rom.s"
 .segment "A2DISK"
 .include "apple2disk.s"
+.include "picodriveterm.s"
 
 .segment "BANKROM"
 
