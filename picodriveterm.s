@@ -1,5 +1,3 @@
-.segment "BANKROM"
-
 PD          = $C700
 
 picodriveterm:

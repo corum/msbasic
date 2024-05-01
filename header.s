@@ -23,7 +23,7 @@
         jmp     hires2                    ;$E018
         jmp     read_char_upper           ;$E01B
         jmp     read_char_async           ;$E01E
-        jmp     textmode                  ;$E021
+        jmp     picodriveterm             ;$E021
         jmp     display_char              ;$E024
         jmp     display_message           ;$E027
         jmp     print_hex                 ;$E02A
@@ -32,6 +32,4 @@
         jmp     joytest                   ;$E033
         jmp     keytest                   ;$E036
         jmp     mousetest                 ;$E039
-        jmp     picodriveterm             ;$E03C
-
 .endif

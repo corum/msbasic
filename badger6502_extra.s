@@ -2,9 +2,11 @@
 .include "apple2rom.s"
 .segment "A2DISK"
 .include "apple2disk.s"
+.segment "BANKROM"
 .include "picodriveterm.s"
 
 .segment "BANKROM"
+
 
 ;Keyboard
 KEYRAM         = $C000
@@ -718,7 +720,6 @@ MSG_FILENOTFOUND:
 MSG_FILE_ERROR:
     .byte "ERR"
     .byte $8D,0
-
 
 .segment "CODE"
 ; load and save for eb6502
@@ -2489,6 +2490,7 @@ ps2_ascii_control:
   .byte $00, $00, $A2, $00, "{", "+", $00, $00, $00, $00, $8D, "}", $00, "|", $00, $00; 5
   .byte $00, $00, $00, $00, $00, $00, $08, $00, $00, $00, $00, $00, $00, $00, $00, $00; 6
   .byte $00, $00, $00, $00, $00, $00, $1B, $00, $00, $00, $00, $00, $00, $00, $00, $00; 7
+
 
 
 
