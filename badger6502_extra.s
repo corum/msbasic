@@ -1632,9 +1632,12 @@ check_via_interrupts:
     jmp @joystick
 
 @kbstrobe:
-    lda $C000     ; strip off the high bit
+    lda KEYRAM     ; strip off the high bit
     and #$7F
-    sta $C000 
+    sta KEYRAM
+    
+; reset ps/2 state machine
+    stz KBSTATE
 
     lda #$10
     sta IFR  ; clear interrupt 
@@ -1742,7 +1745,7 @@ check_via_interrupts:
 
     lda #$7F
     sta $C064  ; for mouse mode, terminate x axis here
-    bra @exit_long_3
+    jmp @exit
 
 @t1_gamepads:
     ; clear bit 7 on both, we're done - our virtual capacitors have discharged

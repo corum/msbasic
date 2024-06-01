@@ -19,5 +19,5 @@ picodriveterm:
     sta PD                   ; write the byte to the picodrive console
     jsr display_apple_char   ; echo to local console
     LDA $C010                ; kbd strobe
-    jmp @output
+    jmp @input
     rts

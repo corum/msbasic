@@ -32,4 +32,5 @@
         jmp     joytest                   ;$E033
         jmp     keytest                   ;$E036
         jmp     mousetest                 ;$E039
+        jmp     mouse_on                  ;$E03C
 .endif
