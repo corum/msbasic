@@ -1985,13 +1985,8 @@ check_via_interrupts:
     lda #$1
     sta IFR ; clear interrupt
 
-
-@ps2_process_start:
-    lda PORTA
-    rol
-    bmi @ps2_process_start   ; as long as ps2 clock is high, tight loop
-
     ldx KBSTATE
+@ps2_process_start:
 
     cpx #PS2_START
     beq @start 
@@ -2015,9 +2010,12 @@ check_via_interrupts:
     sta KBTEMP      ; flip bit 7 so when we ror we're done when carry is set
 
 @wait_loop:
-    lda PORTA
-    rol
-    bpl @wait_loop  ;  loop until ps/2 clock is high
+    bit PORTA
+    bvc @wait_loop  ;  loop until ps/2 clock is high
+    ldx KBSTATE
+@wait_for_low:
+    bit PORTA
+    bvs @wait_for_low   ; as long as ps2 clock is high, tight loop
     bra @ps2_process_start
 
 @exit_long_2:
@@ -2025,7 +2023,7 @@ check_via_interrupts:
 
 @keys:
     lda PORTA
-    rol             ; load PS2_KB_DATA into carry flag
+    rol
     ror KBTEMP
     bcs @toparity
     bra @wait_loop  ; got the key bit
