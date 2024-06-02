@@ -1982,8 +1982,8 @@ check_via_interrupts:
     jmp @exit
 
 @ps2_keyboard_decode:
-    lda #$1
-    sta IFR ; clear interrupt
+    ;lda #$1
+    ;sta IFR ; clear interrupt
 
     ldx KBSTATE
 @ps2_process_start:
@@ -2005,12 +2005,13 @@ check_via_interrupts:
 
 @start:
     ; should be zero - maybe check later
-    inc KBSTATE     ; start->keys
+    ;inc KBSTATE     ; start->keys
+    inx ; start-> keys
     lda #$80
     sta KBTEMP      ; flip bit 7 so when we ror we're done when carry is set
 
 @wait_loop:
-    ldx KBSTATE
+    ;ldx KBSTATE
     bit PORTA
     bvc @wait_loop  ;  loop until ps/2 clock is high
 @wait_for_low:
@@ -2029,13 +2030,15 @@ check_via_interrupts:
     ;bra @exit_long_2
 
 @toparity:
-    inc KBSTATE  ; keys->parity
+    ;inc KBSTATE  ; keys->parity
+    inx ; keys->parity
     bra @wait_loop
     ; bra @exit_long_2
 
 @parity:
     ; should probably check the parity bit - all 1 data bits + parity bit should be odd #
-    inc KBSTATE   ; parity->stop
+    ;inc KBSTATE   ; parity->stop
+    inx ; parity->stop
     bra @wait_loop
     ;bra @exit_long_2
 
