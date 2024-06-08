@@ -13,7 +13,7 @@
 .endif
 .ifdef BADGER6502
         jmp     COLD_START                ;$E000
-        jmp     RESTART                   ;$E003
+        jmp     mouse_on                  ;$E003
         jmp     _cls                      ;$E006
         jmp     _loderunner               ;$E009
         jmp     read_char_async_apple     ;$E00C
@@ -32,5 +32,5 @@
         jmp     joytest                   ;$E033
         jmp     keytest                   ;$E036
         jmp     mousetest                 ;$E039
-        jmp     mouse_on                  ;$E03C
+;       jmp     mouse_on                  ;$E03C
 .endif
