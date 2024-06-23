@@ -662,7 +662,8 @@ MD1:
 MD2:
     lda     LOC1,x          ;X specifies AC or AUX
     bpl     MDRTS
-    sec
+    ;sec
+    nop
 MD3:
     tya
     sbc     LOC0,x          ;compl specified reg
